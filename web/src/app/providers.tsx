@@ -23,9 +23,27 @@ const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+const zetaChainConfig = {
+  network: "testnet",
+  chains: {
+    zeta_testnet: {
+      api: [
+        {
+          url: "http://localhost:8545",
+          type: "evm",
+        },
+      ],
+    },
+  },
+};
+
 const WagmiWrapper = ({ children }: { children: React.ReactNode }) => {
   return (
-    <UniversalKitProvider config={config} client={queryClient}>
+    <UniversalKitProvider
+      config={config}
+      client={queryClient}
+      zetaChainConfig={zetaChainConfig}
+    >
       {children}
     </UniversalKitProvider>
   );
