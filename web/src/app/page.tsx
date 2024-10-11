@@ -17,10 +17,13 @@ import {
   useWriteContract,
   useSendTransaction,
 } from "wagmi";
+import { getBalance } from "@wagmi/core";
+import { config } from "../wagmi";
 import { formatUnits, parseEther } from "viem"; // Using viem for formatting
 import { abi as gatewayAbi } from "../abi/GatewayEVM.sol/GatewayEVM.json";
 import { abi as zerc20Abi } from "../abi/ZRC20.sol/ZRC20.json";
 import { ethers } from "ethers";
+import { useEffect, useState } from "react";
 
 const hardhatAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
@@ -100,7 +103,7 @@ const Page = () => {
 
   const evmDeposit = async function (args: {
     amount: string;
-    erc20: string;
+    erc20: string | null;
     gatewayEvm: string;
     receiver: string;
     revertOptions: revertOptions;
@@ -331,21 +334,37 @@ const Page = () => {
   );
 };
 
-export function Erc20Balance({
+function Erc20Balance({
   contractAddress,
   account,
 }: {
-  contractAddress?: `0x${string}`; // Optional contract address
+  contractAddress?: `0x${string}`; // Optional contract address for ERC20
   account: `0x${string}`;
 }) {
-  // If no contractAddress is provided, fetch the native balance
-  const {
-    data: nativeBalance,
-    isError: isNativeBalanceError,
-    isLoading: isNativeBalanceLoading,
-  } = useBalance({
-    address: account,
-  });
+  const [nativeBalance, setNativeBalance] = useState<string | null>(null);
+  const [isNativeBalanceLoading, setIsNativeBalanceLoading] = useState(true);
+  const [isNativeBalanceError, setIsNativeBalanceError] = useState(false);
+
+  // Fetch the native token balance using ethers.js
+  useEffect(() => {
+    async function fetchNativeBalance() {
+      try {
+        setIsNativeBalanceLoading(true);
+        const provider = new ethers.providers.Web3Provider(window.ethereum); // Use MetaMask provider or a specified one
+        const balance = await provider.getBalance(account); // Fetch the balance
+        setNativeBalance(formatUnits(balance, 18)); // Format to readable Ether/MATIC/etc.
+        setIsNativeBalanceLoading(false);
+      } catch (error) {
+        console.error("Error fetching native balance:", error);
+        setIsNativeBalanceError(true);
+        setIsNativeBalanceLoading(false);
+      }
+    }
+
+    if (!contractAddress) {
+      fetchNativeBalance(); // Only fetch native balance if no ERC20 contract is provided
+    }
+  }, [account, contractAddress]);
 
   // Fetch token balance using viem if contractAddress is provided
   const {
@@ -380,7 +399,7 @@ export function Erc20Balance({
     if (isTokenBalanceLoading) return <div>Loading token balance...</div>;
     if (isTokenBalanceError) return <div>Error fetching token balance</div>;
 
-    // Format the balance using viem's formatUnits
+    // Format the balance using ethers.js' formatUnits
     const formattedTokenBalance = tokenBalance
       ? formatUnits(tokenBalance as bigint, (decimals as number) || 18)
       : "0";
@@ -394,12 +413,7 @@ export function Erc20Balance({
     if (isNativeBalanceLoading) return <div>Loading native balance...</div>;
     if (isNativeBalanceError) return <div>Error fetching native balance</div>;
 
-    // Format the native balance (Ether, MATIC, etc.)
-    const formattedNativeBalance = nativeBalance
-      ? formatUnits(nativeBalance.value, 18)
-      : "0";
-
-    return <div>Native Balance: {formattedNativeBalance}</div>;
+    return <div>Native Balance: {nativeBalance}</div>;
   }
 }
 
