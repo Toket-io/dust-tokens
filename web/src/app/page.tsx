@@ -89,6 +89,10 @@ const erc20Abi = [
 const Page = () => {
   const account = useAccount();
 
+  const balance = getBalance(config, {
+    address: account.address!,
+  });
+
   type revertOptions = {
     callOnRevert: boolean;
     onRevertGasLimit: number;
@@ -168,6 +172,101 @@ const Page = () => {
     return tx;
   };
 
+  const evmDepositAndCall = async function (args: {
+    amount: string;
+    erc20: string | null;
+    gatewayEvm: string;
+    receiver: string;
+    revertOptions: revertOptions;
+    txOptions: txOptions;
+    types: string[];
+    values: any[];
+  }) {
+    // Get MetaMask provider
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+
+    // Request MetaMask account access and get signer
+    await provider.send("eth_requestAccounts", []);
+    const signer = provider.getSigner();
+
+    const { utils } = ethers;
+    const gateway = new ethers.Contract(args.gatewayEvm, gatewayAbi, signer);
+
+    const revertOptions = {
+      abortAddress: "0x0000000000000000000000000000000000000000", // not used
+      callOnRevert: args.revertOptions.callOnRevert,
+      onRevertGasLimit: args.revertOptions.onRevertGasLimit,
+      revertAddress: args.revertOptions.revertAddress,
+      revertMessage: utils.hexlify(
+        utils.toUtf8Bytes(args.revertOptions.revertMessage)
+      ),
+    };
+
+    const txOptions = {
+      gasLimit: args.txOptions.gasLimit,
+      gasPrice: args.txOptions.gasPrice,
+    };
+
+    // Prepare encoded parameters for the call
+    const valuesArray = args.values.map((value, index) => {
+      const type = args.types[index];
+      if (type === "bool") {
+        try {
+          return JSON.parse(value.toLowerCase());
+        } catch (e) {
+          throw new Error(`Invalid boolean value: ${value}`);
+        }
+      } else if (type.startsWith("uint") || type.startsWith("int")) {
+        return ethers.BigNumber.from(value);
+      } else {
+        return value;
+      }
+    });
+
+    const encodedParameters = utils.defaultAbiCoder.encode(
+      args.types,
+      valuesArray
+    );
+
+    let tx;
+    if (args.erc20) {
+      // If ERC20 is specified, approve and call depositAndCall
+      const erc20Contract = new ethers.Contract(args.erc20, zerc20Abi, signer);
+      const decimals = await erc20Contract.decimals();
+      const value = utils.parseUnits(args.amount, decimals);
+
+      // Approve the gateway to spend tokens
+      await erc20Contract.connect(signer).approve(args.gatewayEvm, value);
+
+      const method =
+        "depositAndCall(address,uint256,address,bytes,(address,bool,address,bytes,uint256))";
+      tx = await gateway[method](
+        args.receiver,
+        value,
+        args.erc20,
+        encodedParameters,
+        revertOptions,
+        txOptions
+      );
+    } else {
+      // If no ERC20, it's a native token transfer
+      const value = utils.parseEther(args.amount);
+      const method =
+        "depositAndCall(address,bytes,(address,bool,address,bytes,uint256))";
+      tx = await gateway[method](
+        args.receiver,
+        encodedParameters,
+        revertOptions,
+        {
+          ...txOptions,
+          value,
+        }
+      );
+    }
+
+    return tx;
+  };
+
   const handleDepositETH = async () => {
     const revertOptions: revertOptions = {
       revertAddress: "0x0000000000000000000000000000000000000000",
@@ -210,6 +309,31 @@ const Page = () => {
     });
   };
 
+  const handleSwapFromEth = async () => {
+    const revertOptions: revertOptions = {
+      revertAddress: "0x0000000000000000000000000000000000000000",
+      callOnRevert: false,
+      onRevertGasLimit: 7000000,
+      revertMessage: "0x",
+    };
+
+    const universalAppAddress = "0xa82fF9aFd8f496c3d6ac40E2a0F282E47488CFc9";
+
+    evmDepositAndCall({
+      amount: "100",
+      erc20: null,
+      gatewayEvm: evmAddresses.gateway,
+      receiver: universalAppAddress,
+      revertOptions: revertOptions,
+      txOptions: {
+        gasLimit: 1000000,
+        gasPrice: ethers.BigNumber.from("1000000000"),
+      },
+      types: ["address", "bytes"],
+      values: [zetaAddresses.usdc, hardhatAccount],
+    });
+  };
+
   return (
     <div className="m-4">
       <div className="flex justify-end gap-2 mb-10">
@@ -222,6 +346,7 @@ const Page = () => {
           <div className="border-2 p-4 rounded-xl">
             <h1 className="text-4xl font-bold">EVM</h1>
             <h1 className="text-3xl font-bold mt-6">Signer Balances</h1>
+            <Erc20Balance account={hardhatAccount} />
             <Erc20Balance
               contractAddress={evmAddresses.usdc}
               account={hardhatAccount}
@@ -231,6 +356,7 @@ const Page = () => {
               account={hardhatAccount}
             />
             <h1 className="text-3xl font-bold mt-6">Gateway Balances</h1>
+            <Erc20Balance account={evmAddresses.gateway} />
             <Erc20Balance
               contractAddress={evmAddresses.usdc}
               account={evmAddresses.gateway}
@@ -240,6 +366,7 @@ const Page = () => {
               account={evmAddresses.gateway}
             />
             <h1 className="text-3xl font-bold mt-6">TSS Balances</h1>
+            <Erc20Balance account={evmAddresses.tss!} />
             <Erc20Balance
               contractAddress={evmAddresses.usdc}
               account={evmAddresses.tss!}
@@ -249,6 +376,7 @@ const Page = () => {
               account={evmAddresses.tss!}
             />
             <h1 className="text-3xl font-bold mt-6">Custody Balances</h1>
+            <Erc20Balance account={evmAddresses.erc20custody!} />
             <Erc20Balance
               contractAddress={evmAddresses.usdc}
               account={evmAddresses.erc20custody!}
@@ -329,6 +457,13 @@ const Page = () => {
         >
           Deposit USDC to ZetaChain
         </button>
+        <button
+          onClick={handleSwapFromEth}
+          className="p-2 mt-6 border-2 rounded-md"
+        >
+          Swap ETH to USDC
+          <p className="text-xs">Deposit and Call</p>
+        </button>
       </div>
     </div>
   );
@@ -352,10 +487,12 @@ function Erc20Balance({
         setIsNativeBalanceLoading(true);
         const provider = new ethers.providers.Web3Provider(window.ethereum); // Use MetaMask provider or a specified one
         const balance = await provider.getBalance(account); // Fetch the balance
-        setNativeBalance(formatUnits(balance, 18)); // Format to readable Ether/MATIC/etc.
+        const formattedBalance = formatUnits(balance, 18); // Format to readable Ether/MATIC/etc.
+        setNativeBalance(Number(formattedBalance).toFixed(2)); // Limit to 2 decimal places
         setIsNativeBalanceLoading(false);
       } catch (error) {
         console.error("Error fetching native balance:", error);
+        setNativeBalance(null);
         setIsNativeBalanceError(true);
         setIsNativeBalanceLoading(false);
       }
@@ -399,10 +536,12 @@ function Erc20Balance({
     if (isTokenBalanceLoading) return <div>Loading token balance...</div>;
     if (isTokenBalanceError) return <div>Error fetching token balance</div>;
 
-    // Format the balance using ethers.js' formatUnits
+    // Format the balance using ethers.js' formatUnits and limit to 2 decimals
     const formattedTokenBalance = tokenBalance
-      ? formatUnits(tokenBalance as bigint, (decimals as number) || 18)
-      : "0";
+      ? Number(
+          formatUnits(tokenBalance as bigint, (decimals as number) || 18)
+        ).toFixed(2)
+      : "0.00";
 
     return (
       <div>
@@ -413,7 +552,7 @@ function Erc20Balance({
     if (isNativeBalanceLoading) return <div>Loading native balance...</div>;
     if (isNativeBalanceError) return <div>Error fetching native balance</div>;
 
-    return <div>Native Balance: {nativeBalance}</div>;
+    return <div>ETH: {nativeBalance}</div>;
   }
 }
 
