@@ -8,6 +8,7 @@
     "lint:fix": "npx eslint . --ext .js,.ts --fix",
     "lint": "npx eslint . --ext .js,.ts",
     "deploy": "npx hardhat compile --force && npx hardhat deploy --network localhost",
+    "deployDustTokens": "npx hardhat compile --force && npx hardhat deployDustTokens --network localhost",
     "swap": "npx hardhat swap --network localhost",
     "balance": "npx hardhat balance --network localhost"
   },

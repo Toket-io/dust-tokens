@@ -23,7 +23,7 @@ const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
   } else {
     console.log(`🔑 Using account: ${signer.address}
 
-🚀 Successfully deployed contract on ${network}.
+🚀 Successfully ${args.name} deployed contract on ${network}.
 📜 Contract address: ${contract.address}
 `);
   }
@@ -32,6 +32,20 @@ const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
 task("deploy", "Deploy the contract", main)
   .addFlag("json", "Output in JSON")
   .addOptionalParam("name", "Contract to deploy", "Swap")
+  .addOptionalParam(
+    "systemContract",
+    "System contract",
+    "0x610178dA211FEF7D417bC0e6FeD39F05609AD788"
+  )
+  .addOptionalParam(
+    "gatewayZetaChain",
+    "Gateway address",
+    "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0"
+  );
+
+task("deployDustTokens", "Deploy the contract EVM tokens", main)
+  .addFlag("json", "Output in JSON")
+  .addOptionalParam("name", "Contract to deploy", "EvmDustTokens")
   .addOptionalParam(
     "systemContract",
     "System contract",
