@@ -1,6 +1,10 @@
 import React from "react";
 import { ethers } from "ethers";
 import { formatUnits, parseEther } from "viem"; // Using viem for formatting
+import EvmDustTokens from "../../../contracts/artifacts/contracts/EvmDustTokens.sol/EvmDustTokens.json";
+import { zetaAddresses } from "../app/page";
+
+const evmDustTokenAddress = "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E";
 
 export default function DustTokensActions() {
   const hardhatAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
@@ -26,7 +30,7 @@ export default function DustTokensActions() {
     const { utils } = ethers;
     const dustTokens = new ethers.Contract(
       evmDustTokenAddress,
-      EvmDustTokensAbi,
+      EvmDustTokens.abi,
       signer
     );
 
@@ -74,88 +78,3 @@ export default function DustTokensActions() {
     </div>
   );
 }
-
-const evmDustTokenAddress = "0x5eb3Bc0a489C5A8288765d2336659EbCA68FCd00";
-const EvmDustTokensAbi = [
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "systemContractAddress",
-        type: "address",
-      },
-      {
-        internalType: "address payable",
-        name: "gatewayAddress",
-        type: "address",
-      },
-    ],
-    stateMutability: "nonpayable",
-    type: "constructor",
-  },
-  {
-    inputs: [],
-    name: "gateway",
-    outputs: [
-      {
-        internalType: "contract GatewayEVM",
-        name: "",
-        type: "address",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "bytes",
-        name: "recipient",
-        type: "bytes",
-      },
-    ],
-    name: "swapAndDeposit",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "recipient",
-        type: "address",
-      },
-    ],
-    name: "swapAndDeposit2",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-  {
-    inputs: [],
-    name: "systemContract",
-    outputs: [
-      {
-        internalType: "contract SystemContract",
-        name: "",
-        type: "address",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [
-      {
-        internalType: "address",
-        name: "recipient",
-        type: "address",
-      },
-    ],
-    name: "testTransfer",
-    outputs: [],
-    stateMutability: "payable",
-    type: "function",
-  },
-];
