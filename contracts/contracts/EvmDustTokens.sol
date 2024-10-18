@@ -1,88 +1,29 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.26;
-
-import {SystemContract, IZRC20} from "@zetachain/toolkit/contracts/SystemContract.sol";
-import {SwapHelperLib} from "@zetachain/toolkit/contracts/SwapHelperLib.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-import {RevertContext, RevertOptions} from "@zetachain/protocol-contracts/contracts/Revert.sol";
-import "@zetachain/protocol-contracts/contracts/evm/interfaces/IGatewayEVM.sol";
-import {GatewayEVM} from "@zetachain/protocol-contracts/contracts/evm/GatewayEVM.sol";
-import {Swap} from "./Swap.sol";
+pragma solidity ^0.8.0;
 
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
-
-// import {GatewayZEVM} from "@zetachain/protocol-contracts/contracts/zevm/GatewayZEVM.sol";
-// import "@zetachain/protocol-contracts/contracts/zevm/interfaces/IGatewayZEVM.sol";
+import "hardhat/console.sol"; // Import Hardhat's console for debugging
 
 contract EvmDustTokens {
-    SystemContract public systemContract;
-    GatewayEVM public gateway;
-    Swap public universalApp;
-    uint256 constant BITCOIN = 18332;
     ISwapRouter public immutable swapRouter;
-    address public constant DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
-    address public constant WETH9 = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public immutable DAI;
+    address public immutable WETH9;
+    address public immutable USDC;
+
     uint24 public constant feeTier = 3000;
 
     constructor(
-        address systemContractAddress,
-        address payable gatewayAddress,
-        address universalAppAddress,
-        ISwapRouter _swapRouter
+        ISwapRouter _swapRouter,
+        address _DAI,
+        address _WETH9,
+        address _USDC
     ) {
-        systemContract = SystemContract(systemContractAddress);
-        gateway = GatewayEVM(gatewayAddress);
-        universalApp = Swap(universalAppAddress);
         swapRouter = _swapRouter;
-    }
-
-    struct Params {
-        address target;
-        bytes to;
-    }
-
-    function swapAndDeposit(bytes memory recipient) external payable {
-        require(msg.value > 0, "No ETH sent");
-
-        gateway.deposit{value: msg.value}(
-            address(uint160(bytes20(recipient))), // Ensure valid recipient address
-            RevertOptions({
-                revertAddress: address(0),
-                callOnRevert: false,
-                abortAddress: address(0),
-                revertMessage: "",
-                onRevertGasLimit: 0
-            })
-        );
-    }
-
-    function swapAndDeposit2(
-        address inputToken,
-        uint256 amount,
-        address targetToken,
-        bytes memory recipient
-    ) external payable {
-        uint256 inputForGas;
-        address gasZRC20;
-        uint256 gasFee;
-        uint256 swapAmount;
-
-        uint256 outputAmount = SwapHelperLib.swapExactTokensForTokens(
-            systemContract,
-            inputToken,
-            swapAmount,
-            targetToken,
-            0
-        );
-
-        IZRC20(targetToken).approve(address(gateway), outputAmount);
-
-        IZRC20(targetToken).transfer(
-            address(uint160(bytes20(recipient))),
-            outputAmount
-        );
+        DAI = _DAI;
+        WETH9 = _WETH9;
+        USDC = _USDC;
     }
 
     function swapWETHForDAI(
@@ -114,27 +55,74 @@ contract EvmDustTokens {
         return amountOut;
     }
 
-    // function swapAndDepositAndCall(
-    //     bytes memory recipient,
-    //     bytes calldata payload
-    // ) external payable {
-    //     require(msg.value > 0, "No ETH sent");
+    function executeMultiSwap(address[] memory tokenAddresses) public {
+        // Create an array to store the performed swaps
+        PerformedSwap[] memory performedSwaps = new PerformedSwap[](
+            tokenAddresses.length
+        );
 
-    //     gateway.depositAndCall{value: msg.value}(
-    //         address(uint160(bytes20(recipient))), // Ensure valid recipient address
-    //         RevertOptions({
-    //             revertAddress: address(0),
-    //             callOnRevert: false,
-    //             abortAddress: address(0),
-    //             revertMessage: "",
-    //             onRevertGasLimit: 0
-    //         })
-    //     );
-    // }
+        // Loop through each ERC-20 token address provided
+        for (uint256 i = 0; i < tokenAddresses.length; i++) {
+            address token = tokenAddresses[i];
 
-    function testTransfer(address recipient) external payable {
-        require(msg.value > 0, "No ETH sent");
+            // Check allowance and balance
+            uint256 allowance = IERC20(token).allowance(
+                msg.sender,
+                address(this)
+            );
+            require(allowance > 0, "Insufficient allowance for token");
 
-        payable(recipient).transfer(msg.value);
+            uint256 balance = IERC20(token).balanceOf(msg.sender);
+            require(balance >= allowance, "Insufficient token balance");
+
+            // Transfer token from user to this contract
+            TransferHelper.safeTransferFrom(
+                token,
+                msg.sender,
+                address(this),
+                allowance
+            );
+
+            // Approve the swap router to spend the token
+            TransferHelper.safeApprove(token, address(swapRouter), allowance);
+
+            // Build Uniswap Swap to convert the token to ERC20W
+            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+                .ExactInputSingleParams({
+                    tokenIn: token,
+                    tokenOut: WETH9,
+                    fee: 3000,
+                    recipient: msg.sender,
+                    deadline: block.timestamp,
+                    amountIn: allowance,
+                    amountOutMinimum: 1, // Adjust for slippage tolerance
+                    sqrtPriceLimitX96: 0
+                });
+
+            // Perform the swap
+            uint256 amountOut = swapRouter.exactInputSingle(params);
+
+            // Store the performed swap details
+            performedSwaps[i] = PerformedSwap({
+                tokenIn: token,
+                tokenOut: WETH9,
+                amountIn: allowance,
+                amountOut: amountOut
+            });
+        }
+
+        // Emit an event with the details of the performed swaps
+        emit MultiSwapExecuted(msg.sender, performedSwaps);
+    }
+
+    // Define the event to track the swaps
+    event MultiSwapExecuted(address indexed executor, PerformedSwap[] swaps);
+
+    // Define the PerformedSwap struct
+    struct PerformedSwap {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountIn;
+        uint256 amountOut;
     }
 }

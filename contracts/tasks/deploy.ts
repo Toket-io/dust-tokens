@@ -97,10 +97,10 @@ const mainDust = async (args: any, hre: HardhatRuntimeEnvironment) => {
 
   const factory = await hre.ethers.getContractFactory(args.name);
   const contract = await (factory as any).deploy(
-    args.systemContract,
-    args.gatewayZetaChain,
-    swapAddress,
-    routerAddress
+    "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+    3000
   );
   await contract.deployed();
 
