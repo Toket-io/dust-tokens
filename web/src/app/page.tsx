@@ -25,6 +25,7 @@ import { abi as zerc20Abi } from "../abi/ZRC20.sol/ZRC20.json";
 import { ethers } from "ethers";
 import { useEffect, useState } from "react";
 import DustTokensActions from "../components/DustTokensActions";
+import ForkCheck from "../components/ForkCheck";
 
 const hardhatAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
@@ -37,6 +38,8 @@ interface ChainAddresses {
   usdc: `0x${string}`;
   zeta: `0x${string}`;
   eth?: `0x${string}`;
+  dai?: `0x${string}`;
+  weth?: `0x${string}`;
 }
 
 export const evmAddresses: ChainAddresses = {
@@ -45,6 +48,8 @@ export const evmAddresses: ChainAddresses = {
   erc20custody: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
   usdc: "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
   zeta: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  dai: "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+  weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
 };
 
 export const zetaAddresses: ChainAddresses = {
@@ -318,7 +323,7 @@ const Page = () => {
       revertMessage: "0x",
     };
 
-    const universalAppAddress = "0xa82fF9aFd8f496c3d6ac40E2a0F282E47488CFc9";
+    const universalAppAddress = "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E";
 
     evmDepositAndCall({
       amount: "100",
@@ -348,6 +353,14 @@ const Page = () => {
             <h1 className="text-4xl font-bold">EVM</h1>
             <h1 className="text-3xl font-bold mt-6">Signer Balances</h1>
             <Erc20Balance account={hardhatAccount} />
+            <Erc20Balance
+              contractAddress={evmAddresses.weth}
+              account={hardhatAccount}
+            />
+            <Erc20Balance
+              contractAddress={evmAddresses.dai}
+              account={hardhatAccount}
+            />
             <Erc20Balance
               contractAddress={evmAddresses.usdc}
               account={hardhatAccount}
@@ -391,11 +404,11 @@ const Page = () => {
             <h1 className="text-4xl font-bold">ZetaChain</h1>
             <h1 className="text-3xl font-bold mt-6">Signer Balances</h1>
             <Erc20Balance
-              contractAddress={zetaAddresses.usdc}
+              contractAddress={zetaAddresses.eth!}
               account={hardhatAccount}
             />
             <Erc20Balance
-              contractAddress={zetaAddresses.eth!}
+              contractAddress={zetaAddresses.usdc}
               account={hardhatAccount}
             />
             <Erc20Balance
@@ -467,6 +480,7 @@ const Page = () => {
         </button>
       </div>
       <DustTokensActions />
+      <ForkCheck />
     </div>
   );
 };

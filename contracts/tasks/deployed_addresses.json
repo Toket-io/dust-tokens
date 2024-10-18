@@ -1,6 +1,7 @@
 {
   "localhost": {
-    "Swap": "0x67d269191c92Caf3cD7723F116c85e6E9bf55933",
-    "EvmDustTokens": "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E"
+    "Swap": "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E",
+    "EvmDustTokens": "0xC1dC7a8379885676a6Ea08E67b7Defd9a235De71",
+    "UniswapV2Router": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"
   }
 }

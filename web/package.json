@@ -18,7 +18,7 @@
     "react-dom": "^18.3.0",
     "tailwindcss": "^3.4.6",
     "viem": "2.9.31",
-    "wagmi": "^2.10.10"
+    "wagmi": "^2.12.19"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",

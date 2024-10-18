@@ -93,12 +93,14 @@ const mainDust = async (args: any, hre: HardhatRuntimeEnvironment) => {
 
   // Read the swap address from the deployed contracts file
   const swapAddress = readAddressFromFile(network, "Swap");
+  const routerAddress = readAddressFromFile(network, "UniswapV2Router");
 
   const factory = await hre.ethers.getContractFactory(args.name);
   const contract = await (factory as any).deploy(
     args.systemContract,
     args.gatewayZetaChain,
-    swapAddress
+    swapAddress,
+    routerAddress
   );
   await contract.deployed();
 
