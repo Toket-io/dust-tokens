@@ -238,88 +238,15 @@ describe("EvmDustTokens", function () {
     // AMOUNT TO SWAP
     const swapAmount = "1";
 
-    const ercContracts = [DAI, USDC, LINK];
-
-    // Loop through each ERC20 and approve the DustTokens contract to spend the tokens
-    for (let i = 0; i < ercContracts.length; i++) {
-      const ercContract = ercContracts[i];
-      let formattedAmount = hre.ethers.utils.parseUnits(
-        swapAmount,
-        DAI_DECIMALS
-      );
-
-      if (ercContract == USDC) {
-        formattedAmount = hre.ethers.utils.parseUnits(
-          swapAmount,
-          USDC_DECIMALS
-        );
-      }
-
-      const approveTx = await ercContract.approve(
-        dustTokens.address,
-        formattedAmount
-      );
-      await approveTx.wait();
-      console.log(`${ercContract.address} approved for MultiSwap`);
-    }
-
-    /* Check Initial Balances */
-    const beforeObj = {
-      dai: await DAI.balanceOf(signer.address),
-      link: await LINK.balanceOf(signer.address),
-      usdc: await USDC.balanceOf(signer.address),
-    };
-    const beforeFormattedObj = {
-      dai: Number(hre.ethers.utils.formatUnits(beforeObj.dai, DAI_DECIMALS)),
-      link: Number(hre.ethers.utils.formatUnits(beforeObj.link, DAI_DECIMALS)),
-      usdc: Number(hre.ethers.utils.formatUnits(beforeObj.usdc, USDC_DECIMALS)),
-    };
-
-    /* Execute the swap */
-    const swapTx = await dustTokens.executeMultiSwap([
-      DAI_ADDRESS,
-      USDC_ADDRESS,
-      LINK_ADDRESS,
-    ]);
-    await swapTx.wait();
-    console.log("MultiSwap executed");
-
-    // RESULT BALANCES
-    const obj = {
-      dai: await DAI.balanceOf(signer.address),
-      link: await LINK.balanceOf(signer.address),
-      usdc: await USDC.balanceOf(signer.address),
-    };
-    const formattedObj = {
-      dai: Number(hre.ethers.utils.formatUnits(obj.dai, DAI_DECIMALS)),
-      link: Number(hre.ethers.utils.formatUnits(obj.link, DAI_DECIMALS)),
-      usdc: Number(hre.ethers.utils.formatUnits(obj.usdc, USDC_DECIMALS)),
-    };
-
-    // Create a multiline log for each token showing the before and after balances and the diff
-    const log = Object.keys(formattedObj).map((key) => {
-      return `${key} balance before: ${beforeFormattedObj[key]} \n ${key} balance after: ${formattedObj[key]}`;
-    });
-
-    console.log(log);
-
-    expect(formattedObj.dai).to.be.lessThan(beforeFormattedObj.dai);
-    expect(formattedObj.link).to.be.lessThan(beforeFormattedObj.link);
-  });
-
-  it("Should swap all tokens for WETH2", async function () {
-    // AMOUNT TO SWAP
-    const swapAmount = "1";
-
-    // ERC-20 Contracts to be swapped
+    // ERC-20 Contracts to be swapped, with their names
     const ercContracts = [
-      { contract: DAI, decimals: DAI_DECIMALS },
-      { contract: USDC, decimals: USDC_DECIMALS },
-      { contract: LINK, decimals: DAI_DECIMALS }, // Assuming LINK shares the same decimals as DAI
+      { contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
+      { contract: USDC, decimals: USDC_DECIMALS, name: "USDC" },
+      { contract: LINK, decimals: DAI_DECIMALS, name: "LINK" }, // Assuming LINK uses the same decimals as DAI
     ];
 
-    // Loop through each ERC-20 and approve the MultiSwap contract to spend tokens
-    for (const { contract, decimals } of ercContracts) {
+    // Approve the MultiSwap contract to spend tokens
+    for (const { name, contract, decimals } of ercContracts) {
       const formattedAmount = hre.ethers.utils.parseUnits(swapAmount, decimals);
 
       const approveTx = await contract.approve(
@@ -328,19 +255,17 @@ describe("EvmDustTokens", function () {
       );
       await approveTx.wait();
 
-      console.log(`${contract.address} approved for MultiSwap`);
+      console.log(`${name} approved for MultiSwap`);
     }
 
     // Check Initial Balances
     const beforeBalances = {};
-    for (const { contract, decimals } of ercContracts) {
+    for (const { name, contract, decimals } of ercContracts) {
       const balance = await contract.balanceOf(signer.address);
-      beforeBalances[contract.address] = Number(
+      beforeBalances[name] = Number(
         hre.ethers.utils.formatUnits(balance, decimals)
       );
     }
-
-    console.log("Before Balances:", beforeBalances);
 
     // Execute the swap
     const tokenAddresses = ercContracts.map(({ contract }) => contract.address);
@@ -350,35 +275,32 @@ describe("EvmDustTokens", function () {
 
     // Check Result Balances
     const afterBalances = {};
-    for (const { contract, decimals } of ercContracts) {
+    for (const { name, contract, decimals } of ercContracts) {
       const balance = await contract.balanceOf(signer.address);
-      afterBalances[contract.address] = Number(
+      afterBalances[name] = Number(
         hre.ethers.utils.formatUnits(balance, decimals)
       );
     }
 
-    console.log("After Balances:", afterBalances);
-
     // Log the balance differences
-    for (const { contract } of ercContracts) {
-      const before = beforeBalances[contract.address];
-      const after = afterBalances[contract.address];
+    for (const { name } of ercContracts) {
+      const before = beforeBalances[name];
+      const after = afterBalances[name];
       console.log(
-        `${contract.address} - Before: ${before}, After: ${after}, Diff: ${
+        `${name} balance - Before: ${before}, After: ${after}, Diff: ${
           before - after
         }`
       );
     }
 
     // Assertions: Ensure each token's balance decreased after the swap
-    for (const { contract } of ercContracts) {
-      const diff =
-        beforeBalances[contract.address] - afterBalances[contract.address];
-      expect(afterBalances[contract.address]).to.be.lessThan(
-        beforeBalances[contract.address]
-      );
+    for (const { name } of ercContracts) {
+      const diff = beforeBalances[name] - afterBalances[name];
 
-      // Ensure the difference is equal to the amount swapped
+      // Ensure the final balance is less than the initial balance
+      expect(afterBalances[name]).to.be.lessThan(beforeBalances[name]);
+
+      // Ensure the difference matches the swap amount
       expect(diff).to.equal(Number(swapAmount));
     }
   });
