@@ -243,9 +243,21 @@ describe("EvmDustTokens", function () {
     // Loop through each ERC20 and approve the DustTokens contract to spend the tokens
     for (let i = 0; i < ercContracts.length; i++) {
       const ercContract = ercContracts[i];
+      let formattedAmount = hre.ethers.utils.parseUnits(
+        swapAmount,
+        DAI_DECIMALS
+      );
+
+      if (ercContract == USDC) {
+        formattedAmount = hre.ethers.utils.parseUnits(
+          swapAmount,
+          USDC_DECIMALS
+        );
+      }
+
       const approveTx = await ercContract.approve(
         dustTokens.address,
-        hre.ethers.utils.parseEther(swapAmount)
+        formattedAmount
       );
       await approveTx.wait();
       console.log(`${ercContract.address} approved for MultiSwap`);
@@ -266,7 +278,7 @@ describe("EvmDustTokens", function () {
     /* Execute the swap */
     const swapTx = await dustTokens.executeMultiSwap([
       DAI_ADDRESS,
-      //   USDC_ADDRESS,
+      USDC_ADDRESS,
       LINK_ADDRESS,
     ]);
     await swapTx.wait();
