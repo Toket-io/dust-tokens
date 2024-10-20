@@ -5,18 +5,15 @@ import hre from "hardhat";
 
 import { EvmDustTokens } from "../typechain-types";
 
-const UNI_ADDRESS = process.env.UNI_ADDRESS ?? "";
-const UNI_PRICE_FEED = process.env.UNI_PRICE_FEED ?? "";
-
 const DAI_DECIMALS = 18;
 const USDC_DECIMALS = 6;
 
 const WETH_ADDRESS: string = process.env.WETH_ADDRESS ?? "";
 const DAI_ADDRESS: string = process.env.DAI_ADDRESS ?? "";
 const USDC_ADDRESS: string = process.env.USDC_ADDRESS ?? "";
-const WBTC_ADDRESS: string = process.env.WBTC_ADDRESS ?? "";
+const UNI_ADDRESS = process.env.UNI_ADDRESS ?? "";
 const LINK_ADDRESS: string = process.env.LINK_ADDRESS ?? "";
-const ARB_ADDRESS: string = process.env.ARB_ADDRESS ?? "";
+const WBTC_ADDRESS: string = process.env.WBTC_ADDRESS ?? "";
 
 const WETH_PRICE_FEED: string = process.env.WETH_PRICE_FEED ?? "";
 const DAI_PRICE_FEED: string = process.env.DAI_PRICE_FEED ?? "";
@@ -24,10 +21,7 @@ const WBTC_PRICE_FEED: string = process.env.WBTC_PRICE_FEED ?? "";
 const LINK_PRICE_FEED: string = process.env.LINK_PRICE_FEED ?? "";
 const ARB_PRICE_FEED: string = process.env.ARB_PRICE_FEED ?? "";
 
-const GELATO_AUTOMATE: string = process.env.GELATO_AUTOMATE ?? "";
 const UNISWAP_ROUTER: string = process.env.UNISWAP_ROUTER ?? "";
-
-const GELATO_PAYMENT_TOKEN: string = process.env.GELATO_PAYMENT_TOKEN ?? "";
 
 const ercAbi = [
   // Read-Only Functions
@@ -45,6 +39,8 @@ describe("EvmDustTokens", function () {
   let DAI: Contract;
   let USDC: Contract;
   let LINK: Contract;
+  let UNI: Contract;
+  let WBTC: Contract;
   let startBalances: Object;
 
   this.beforeAll(async function () {
@@ -72,18 +68,28 @@ describe("EvmDustTokens", function () {
     DAI = new hre.ethers.Contract(DAI_ADDRESS, ercAbi, signer);
     USDC = new hre.ethers.Contract(USDC_ADDRESS, ercAbi, signer);
     LINK = new hre.ethers.Contract(LINK_ADDRESS, ercAbi, signer);
+    UNI = new hre.ethers.Contract(UNI_ADDRESS, ercAbi, signer);
+    WBTC = new hre.ethers.Contract(WBTC_ADDRESS, ercAbi, signer);
 
     const balances = {
       dai: await DAI.balanceOf(signer.address),
       link: await LINK.balanceOf(signer.address),
+      nativeEth: await signer.getBalance(),
+      uni: await UNI.balanceOf(signer.address),
       usdc: await USDC.balanceOf(signer.address),
+      wbtc: await WBTC.balanceOf(signer.address),
       weth: await WETH.balanceOf(signer.address),
     };
 
     const formattedBalances = {
       dai: Number(hre.ethers.utils.formatUnits(balances.dai, DAI_DECIMALS)),
       link: Number(hre.ethers.utils.formatUnits(balances.link, DAI_DECIMALS)),
+      nativeEth: Number(
+        hre.ethers.utils.formatUnits(balances.nativeEth, DAI_DECIMALS)
+      ),
+      uni: Number(hre.ethers.utils.formatUnits(balances.uni, DAI_DECIMALS)),
       usdc: Number(hre.ethers.utils.formatUnits(balances.usdc, USDC_DECIMALS)),
+      wbtc: Number(hre.ethers.utils.formatUnits(balances.wbtc, DAI_DECIMALS)),
       weth: Number(hre.ethers.utils.formatUnits(balances.weth, DAI_DECIMALS)),
     };
 
@@ -154,7 +160,7 @@ describe("EvmDustTokens", function () {
     console.log("WETH approved for SimpleSwap");
 
     /* Execute the swap */
-    console.log("Swapping WETH for DAI:", amountIn.toString());
+    console.log("Swapping WETH for DAI:", swapAmount);
     const swapTx = await dustTokens.swapWETHForDAI(amountIn, {
       gasLimit: 300000,
     });
@@ -184,7 +190,7 @@ describe("EvmDustTokens", function () {
     console.log("WETH approved for SimpleSwap");
 
     /* Execute the swap */
-    console.log("Swapping WETH for USDC:", amountIn.toString());
+    console.log("Swapping WETH for USDC:", swapAmount);
     const swapTx = await dustTokens.swapWETHForUSDC(amountIn, {
       gasLimit: 300000,
     });
@@ -199,7 +205,7 @@ describe("EvmDustTokens", function () {
     const USDCBalanceAfter = Number(
       hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
     );
-    console.log("DAI balance after swap:", USDCBalanceAfter);
+    console.log("USDC balance after swap:", USDCBalanceAfter);
 
     expect(USDCBalanceAfter).is.greaterThan(startBalances["usdc"]);
   });
@@ -214,7 +220,7 @@ describe("EvmDustTokens", function () {
     console.log("WETH approved for SimpleSwap");
 
     /* Execute the swap */
-    console.log("Swapping WETH for LINK:", amountIn.toString());
+    console.log("Swapping WETH for LINK:", swapAmount);
     const swapTx = await dustTokens.swapWETHForLINK(amountIn, {
       gasLimit: 300000,
     });
@@ -229,9 +235,72 @@ describe("EvmDustTokens", function () {
     const LINKBalanceAfter = Number(
       hre.ethers.utils.formatUnits(expandedLINKBalanceAfter, DAI_DECIMALS)
     );
-    console.log("DAI balance after swap:", LINKBalanceAfter);
+    console.log("LINK balance after swap:", LINKBalanceAfter);
 
     expect(LINKBalanceAfter).is.greaterThan(startBalances["link"]);
+  });
+
+  it("Should swap WETH for UNI", async function () {
+    const swapAmount = "0.1";
+    const amountIn = hre.ethers.utils.parseEther(swapAmount);
+
+    /* Approve WETH */
+    const approveTx = await WETH.approve(dustTokens.address, amountIn);
+    await approveTx.wait();
+    console.log("WETH approved for SimpleSwap");
+
+    /* Execute the swap */
+    console.log("Swapping WETH for UNI:", swapAmount);
+    const swapTx = await dustTokens.swapWETHForUNI(amountIn, {
+      gasLimit: 300000,
+    });
+
+    await swapTx.wait();
+    console.log("Swap executed");
+
+    expect(swapTx).not.reverted;
+
+    /* Check UNI end balance */
+    const expandedUNIBalanceAfter = await UNI.balanceOf(signer.address);
+    const UNIBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedUNIBalanceAfter, DAI_DECIMALS)
+    );
+    console.log("UNI balance after swap:", UNIBalanceAfter);
+
+    expect(UNIBalanceAfter).is.greaterThan(startBalances["uni"]);
+  });
+
+  it("Should swap WETH for WBTC", async function () {
+    const swapAmount = "100";
+    const amountIn = hre.ethers.utils.parseEther(swapAmount);
+
+    /* Approve WETH */
+    const currentBalance = await WETH.balanceOf(signer.address);
+    console.log(
+      "Current WETH balance:",
+      hre.ethers.utils.formatUnits(currentBalance, DAI_DECIMALS)
+    );
+    const approveTx = await WETH.approve(dustTokens.address, amountIn);
+    await approveTx.wait();
+    console.log("WETH approved for SimpleSwap");
+
+    /* Execute the swap */
+    console.log("Swapping WETH for WBTC:", swapAmount);
+    const swapTx = await dustTokens.swapWETHForWBTC(amountIn);
+
+    await swapTx.wait();
+    console.log("Swap executed");
+
+    expect(swapTx).not.reverted;
+
+    /* Check WBTC end balance */
+    const expandedWBTCBalanceAfter = await WBTC.balanceOf(signer.address);
+    const WBTCBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedWBTCBalanceAfter, DAI_DECIMALS)
+    );
+    console.log("WBTC balance after swap:", WBTCBalanceAfter);
+
+    expect(WBTCBalanceAfter).is.greaterThan(startBalances["wbtc"]);
   });
 
   it("Should swap all tokens for WETH", async function () {
@@ -243,6 +312,8 @@ describe("EvmDustTokens", function () {
       { contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
       { contract: USDC, decimals: USDC_DECIMALS, name: "USDC" },
       { contract: LINK, decimals: DAI_DECIMALS, name: "LINK" }, // Assuming LINK uses the same decimals as DAI
+      { contract: UNI, decimals: DAI_DECIMALS, name: "UNI" }, // Assuming LINK uses the same decimals as DAI
+      //   { contract: WBTC, decimals: DAI_DECIMALS, name: "WBTC" }, // Assuming LINK uses the same decimals as DAI
     ];
 
     // Approve the MultiSwap contract to spend tokens
