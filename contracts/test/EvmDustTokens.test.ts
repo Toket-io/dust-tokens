@@ -306,4 +306,80 @@ describe("EvmDustTokens", function () {
     expect(formattedObj.dai).to.be.lessThan(beforeFormattedObj.dai);
     expect(formattedObj.link).to.be.lessThan(beforeFormattedObj.link);
   });
+
+  it("Should swap all tokens for WETH2", async function () {
+    // AMOUNT TO SWAP
+    const swapAmount = "1";
+
+    // ERC-20 Contracts to be swapped
+    const ercContracts = [
+      { contract: DAI, decimals: DAI_DECIMALS },
+      { contract: USDC, decimals: USDC_DECIMALS },
+      { contract: LINK, decimals: DAI_DECIMALS }, // Assuming LINK shares the same decimals as DAI
+    ];
+
+    // Loop through each ERC-20 and approve the MultiSwap contract to spend tokens
+    for (const { contract, decimals } of ercContracts) {
+      const formattedAmount = hre.ethers.utils.parseUnits(swapAmount, decimals);
+
+      const approveTx = await contract.approve(
+        dustTokens.address,
+        formattedAmount
+      );
+      await approveTx.wait();
+
+      console.log(`${contract.address} approved for MultiSwap`);
+    }
+
+    // Check Initial Balances
+    const beforeBalances = {};
+    for (const { contract, decimals } of ercContracts) {
+      const balance = await contract.balanceOf(signer.address);
+      beforeBalances[contract.address] = Number(
+        hre.ethers.utils.formatUnits(balance, decimals)
+      );
+    }
+
+    console.log("Before Balances:", beforeBalances);
+
+    // Execute the swap
+    const tokenAddresses = ercContracts.map(({ contract }) => contract.address);
+    const swapTx = await dustTokens.executeMultiSwap(tokenAddresses);
+    await swapTx.wait();
+    console.log("MultiSwap executed");
+
+    // Check Result Balances
+    const afterBalances = {};
+    for (const { contract, decimals } of ercContracts) {
+      const balance = await contract.balanceOf(signer.address);
+      afterBalances[contract.address] = Number(
+        hre.ethers.utils.formatUnits(balance, decimals)
+      );
+    }
+
+    console.log("After Balances:", afterBalances);
+
+    // Log the balance differences
+    for (const { contract } of ercContracts) {
+      const before = beforeBalances[contract.address];
+      const after = afterBalances[contract.address];
+      console.log(
+        `${contract.address} - Before: ${before}, After: ${after}, Diff: ${
+          before - after
+        }`
+      );
+    }
+
+    // Assertions: Ensure each token's balance decreased after the swap
+    for (const { contract } of ercContracts) {
+      const diff =
+        beforeBalances[contract.address] - afterBalances[contract.address];
+      expect(afterBalances[contract.address]).to.be.lessThan(
+        beforeBalances[contract.address]
+      );
+
+      // Ensure the difference is equal to the amount swapped
+      expect(diff).to.equal(Number(swapAmount));
+    }
+  });
 });
