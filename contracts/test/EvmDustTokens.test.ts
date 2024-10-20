@@ -70,7 +70,9 @@ describe("EvmDustTokens", function () {
     LINK = new hre.ethers.Contract(LINK_ADDRESS, ercAbi, signer);
     UNI = new hre.ethers.Contract(UNI_ADDRESS, ercAbi, signer);
     WBTC = new hre.ethers.Contract(WBTC_ADDRESS, ercAbi, signer);
+  });
 
+  this.beforeEach(async function () {
     const balances = {
       dai: await DAI.balanceOf(signer.address),
       link: await LINK.balanceOf(signer.address),
@@ -106,48 +108,12 @@ describe("EvmDustTokens", function () {
     // Fund signer with some WETH and USDC
     let signers = await hre.ethers.getSigners();
     const signer = signers[0];
-
     const WETH = new hre.ethers.Contract(WETH_ADDRESS, ercAbi, signer);
-
     // const wethBalanceBefore = await WETH.balanceOf(signer.address);
-
     const depositWETH = await WETH.deposit({
       value: hre.ethers.utils.parseEther("100"),
     });
     await depositWETH.wait();
-
-    // const wethBalanceAfter = await WETH.balanceOf(signer.getAddress());
-
-    // console.log(
-    //   `WETH balance before: ${wethBalanceBefore} - WETH balance after: ${wethBalanceAfter}`
-    // );
-
-    // const simpleSwapFactory = await hre.ethers.getContractFactory("SimpleSwap");
-    // const simpleSwap = await simpleSwapFactory.deploy(
-    //   UNISWAP_ROUTER,
-    //   DAI_ADDRESS,
-    //   WETH_ADDRESS,
-    //   USDC_ADDRESS
-    // ); // Ensure the contract is deployed
-    // simpleSwap.waitForDeployment();
-
-    // /* Approve the swapper contract to spend WETH for me */
-    // const approveTx = await WETH.approve(
-    //   simpleSwap.getAddress(),
-    //   hre.ethers.utils.parseEther("0.2")
-    // );
-    // await approveTx.wait();
-
-    // const amountIn = hre.ethers.utils.parseEther("0.2");
-    // const swapTx = await simpleSwap.swapWETHForUSDC(amountIn, {
-    //   gasLimit: 300000,
-    // });
-    // await swapTx.wait();
-
-    // const usdcBalanceAfter = await USDC.balanceOf(signer.address);
-    // const usdcBalanceAfterFormatted = Number(
-    //   hre.ethers.utils.formatUnits(usdcBalanceAfter, USDC_DECIMALS)
-    // );
   });
 
   it("Should swap WETH for DAI", async function () {
@@ -271,7 +237,7 @@ describe("EvmDustTokens", function () {
   });
 
   it("Should swap WETH for WBTC", async function () {
-    const swapAmount = "100";
+    const swapAmount = "1";
     const amountIn = hre.ethers.utils.parseEther(swapAmount);
 
     /* Approve WETH */
@@ -374,5 +340,19 @@ describe("EvmDustTokens", function () {
       // Ensure the difference matches the swap amount
       expect(diff).to.equal(Number(swapAmount));
     }
+
+    // Check WETH balance
+    const expandedWETHBalanceAfter = await WETH.balanceOf(signer.address);
+    const WETHBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedWETHBalanceAfter, DAI_DECIMALS)
+    );
+    const WETHBalanceBefore = startBalances["weth"];
+    console.log(
+      `WETH balance - Before: ${WETHBalanceBefore}, After: ${WETHBalanceAfter}, Diff: ${
+        WETHBalanceBefore - WETHBalanceAfter
+      }`
+    );
+    // Ensure the WETH balance increased after the swap
+    expect(WETHBalanceAfter).to.be.greaterThan(WETHBalanceBefore);
   });
 });
