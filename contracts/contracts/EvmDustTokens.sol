@@ -11,6 +11,9 @@ contract EvmDustTokens {
     address public immutable DAI;
     address public immutable WETH9;
     address public immutable USDC;
+    address public immutable LINK;
+    address public immutable UNI;
+    address public immutable WBTC;
 
     uint24 public constant feeTier = 3000;
 
@@ -18,12 +21,18 @@ contract EvmDustTokens {
         ISwapRouter _swapRouter,
         address _DAI,
         address _WETH9,
-        address _USDC
+        address _USDC,
+        address _LINK,
+        address _UNI,
+        address _WBTC
     ) {
         swapRouter = _swapRouter;
         DAI = _DAI;
         WETH9 = _WETH9;
         USDC = _USDC;
+        LINK = _LINK;
+        UNI = _UNI;
+        WBTC = _WBTC;
     }
 
     function swapWETHForDAI(
@@ -43,6 +52,122 @@ contract EvmDustTokens {
             .ExactInputSingleParams({
                 tokenIn: WETH9,
                 tokenOut: DAI,
+                fee: feeTier,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+        // The call to `exactInputSingle` executes the swap.
+        amountOut = swapRouter.exactInputSingle(params);
+        return amountOut;
+    }
+
+    function swapWETHForUSDC(
+        uint amountIn
+    ) external returns (uint256 amountOut) {
+        // Transfer the specified amount of WETH9 to this contract.
+        TransferHelper.safeTransferFrom(
+            WETH9,
+            msg.sender,
+            address(this),
+            amountIn
+        );
+        // Approve the router to spend WETH9.
+        TransferHelper.safeApprove(WETH9, address(swapRouter), amountIn);
+        // Create the params that will be used to execute the swap
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
+                tokenIn: WETH9,
+                tokenOut: USDC,
+                fee: feeTier,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+        // The call to `exactInputSingle` executes the swap.
+        amountOut = swapRouter.exactInputSingle(params);
+        return amountOut;
+    }
+
+    function swapWETHForLINK(
+        uint amountIn
+    ) external returns (uint256 amountOut) {
+        // Transfer the specified amount of WETH9 to this contract.
+        TransferHelper.safeTransferFrom(
+            WETH9,
+            msg.sender,
+            address(this),
+            amountIn
+        );
+        // Approve the router to spend WETH9.
+        TransferHelper.safeApprove(WETH9, address(swapRouter), amountIn);
+        // Create the params that will be used to execute the swap
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
+                tokenIn: WETH9,
+                tokenOut: LINK,
+                fee: feeTier,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+        // The call to `exactInputSingle` executes the swap.
+        amountOut = swapRouter.exactInputSingle(params);
+        return amountOut;
+    }
+
+    function swapWETHForUNI(
+        uint amountIn
+    ) external returns (uint256 amountOut) {
+        // Transfer the specified amount of WETH9 to this contract.
+        TransferHelper.safeTransferFrom(
+            WETH9,
+            msg.sender,
+            address(this),
+            amountIn
+        );
+        // Approve the router to spend WETH9.
+        TransferHelper.safeApprove(WETH9, address(swapRouter), amountIn);
+        // Create the params that will be used to execute the swap
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
+                tokenIn: WETH9,
+                tokenOut: UNI,
+                fee: feeTier,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            });
+        // The call to `exactInputSingle` executes the swap.
+        amountOut = swapRouter.exactInputSingle(params);
+        return amountOut;
+    }
+
+    function swapWETHForWBTC(
+        uint amountIn
+    ) external returns (uint256 amountOut) {
+        // Transfer the specified amount of WETH9 to this contract.
+        TransferHelper.safeTransferFrom(
+            WETH9,
+            msg.sender,
+            address(this),
+            amountIn
+        );
+        // Approve the router to spend WETH9.
+        TransferHelper.safeApprove(WETH9, address(swapRouter), amountIn);
+        // Create the params that will be used to execute the swap
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
+                tokenIn: WETH9,
+                tokenOut: WBTC,
                 fee: feeTier,
                 recipient: msg.sender,
                 deadline: block.timestamp,
