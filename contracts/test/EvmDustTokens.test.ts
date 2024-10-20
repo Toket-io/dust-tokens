@@ -73,6 +73,12 @@ describe("EvmDustTokens", function () {
   });
 
   this.beforeEach(async function () {
+    // Fund signer with some WETH
+    const depositWETH = await WETH.deposit({
+      value: hre.ethers.utils.parseEther("10"),
+    });
+    await depositWETH.wait();
+
     const balances = {
       dai: await DAI.balanceOf(signer.address),
       link: await LINK.balanceOf(signer.address),
@@ -102,18 +108,6 @@ describe("EvmDustTokens", function () {
     );
 
     startBalances = formattedBalances;
-  });
-
-  this.beforeEach(async function () {
-    // Fund signer with some WETH and USDC
-    let signers = await hre.ethers.getSigners();
-    const signer = signers[0];
-    const WETH = new hre.ethers.Contract(WETH_ADDRESS, ercAbi, signer);
-    // const wethBalanceBefore = await WETH.balanceOf(signer.address);
-    const depositWETH = await WETH.deposit({
-      value: hre.ethers.utils.parseEther("100"),
-    });
-    await depositWETH.wait();
   });
 
   it("Should swap WETH for DAI", async function () {
