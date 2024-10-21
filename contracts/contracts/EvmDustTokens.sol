@@ -274,7 +274,35 @@ contract EvmDustTokens {
     function executeMultiSwapAndWithdraw(
         address[] memory tokenAddresses
     ) external {
-        uint256 totalWethReceived = 0;
+        uint256 totalWethReceived = MultiSwap(tokenAddresses, WETH9);
+
+        // Convert WETH to native ETH
+        IWETH(WETH9).withdrawTo(msg.sender, totalWethReceived);
+        // IWETH(WETH9).withdraw(totalWethReceived);
+
+        emit MultiSwapExecutedAndWithdrawn(msg.sender, totalWethReceived);
+    }
+
+    function executeMultiSwapAndWithdrawUSDC(
+        address[] memory tokenAddresses
+    ) external {
+        uint256 totalWethReceived = MultiSwap(tokenAddresses, USDC);
+
+        // TransferHelper.safeTransferFrom(
+        //     USDC,
+        //     address(this),
+        //     msg.sender,
+        //     totalWethReceived
+        // );
+
+        emit MultiSwapExecutedAndWithdrawn(msg.sender, totalWethReceived);
+    }
+
+    function MultiSwap(
+        address[] memory tokenAddresses,
+        address outputToken
+    ) internal returns (uint256) {
+        uint256 totalTokensReceived = 0;
 
         // Loop through each ERC-20 token address provided
         for (uint256 i = 0; i < tokenAddresses.length; i++) {
@@ -305,7 +333,7 @@ contract EvmDustTokens {
             ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
                 .ExactInputSingleParams({
                     tokenIn: token,
-                    tokenOut: WETH9,
+                    tokenOut: outputToken,
                     fee: 3000,
                     recipient: address(this), // Swap to this contract
                     deadline: block.timestamp,
@@ -316,14 +344,10 @@ contract EvmDustTokens {
 
             // Perform the swap
             uint256 amountOut = swapRouter.exactInputSingle(params);
-            totalWethReceived += amountOut;
+            totalTokensReceived += amountOut;
         }
 
-        // Convert WETH to native ETH
-        IWETH(WETH9).withdrawTo(msg.sender, totalWethReceived);
-        // IWETH(WETH9).withdraw(totalWethReceived);
-
-        emit MultiSwapExecutedAndWithdrawn(msg.sender, totalWethReceived);
+        return totalTokensReceived;
     }
 
     function TestDeposit() external payable {
