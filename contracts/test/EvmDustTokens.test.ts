@@ -505,7 +505,7 @@ describe("EvmDustTokens", function () {
     // AMOUNT TO SWAP
     const swapAmount = "1";
 
-    const expandedUSDCBalanceBefore = await WETH.balanceOf(dustTokens.address);
+    const expandedUSDCBalanceBefore = await USDC.balanceOf(signer.address);
     const USDCBalanceBefore = Number(
       hre.ethers.utils.formatUnits(expandedUSDCBalanceBefore, USDC_DECIMALS)
     );
@@ -545,8 +545,19 @@ describe("EvmDustTokens", function () {
     const swapTx = await dustTokens.executeMultiSwapAndWithdrawUSDC(
       tokenAddresses
     );
-    await swapTx.wait();
-    console.log("MultiSwap and withdraw executed");
+    const receipt = await swapTx.wait(); // Wait for the transaction to be mined
+
+    // Extract the totalReceived value from the emitted event
+    const event = receipt.events?.find(
+      (e) => e.event === "MultiSwapExecutedAndWithdrawn"
+    );
+    const totalReceived = event?.args?.totalWethReceived;
+    const formmateTotalReceived = hre.ethers.utils.formatUnits(
+      totalReceived,
+      USDC_DECIMALS
+    );
+
+    console.log(`Total received in USDC: ${formmateTotalReceived}`);
 
     // Check Result Balances
     const afterBalances = {};
@@ -580,15 +591,14 @@ describe("EvmDustTokens", function () {
     }
 
     // CONTRACT WETH BALANCE
-    const expandedUSDCBalanceAfter = await USDC.balanceOf(dustTokens.address);
+    const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
     const USDCBalanceAfter = Number(
       hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
     );
+    const USDCDiff = USDCBalanceBefore - USDCBalanceAfter;
 
     console.log(
-      `USDC balance - Before: ${USDCBalanceBefore}, After: ${USDCBalanceAfter}, Diff: ${
-        USDCBalanceBefore - USDCBalanceAfter
-      }`
+      `USDC balance - Before: ${USDCBalanceBefore}, After: ${USDCBalanceAfter}, Diff: ${USDCDiff}`
     );
 
     expect(USDCBalanceAfter).is.greaterThan(USDCBalanceBefore);

@@ -286,16 +286,11 @@ contract EvmDustTokens {
     function executeMultiSwapAndWithdrawUSDC(
         address[] memory tokenAddresses
     ) external {
-        uint256 totalWethReceived = MultiSwap(tokenAddresses, USDC);
+        uint256 totalUSDCReceived = MultiSwap(tokenAddresses, USDC);
 
-        // TransferHelper.safeTransferFrom(
-        //     USDC,
-        //     address(this),
-        //     msg.sender,
-        //     totalWethReceived
-        // );
+        TransferHelper.safeTransfer(USDC, msg.sender, totalUSDCReceived);
 
-        emit MultiSwapExecutedAndWithdrawn(msg.sender, totalWethReceived);
+        emit MultiSwapExecutedAndWithdrawn(msg.sender, totalUSDCReceived);
     }
 
     function MultiSwap(
