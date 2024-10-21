@@ -8,6 +8,8 @@ import { EvmDustTokens } from "../typechain-types";
 const DAI_DECIMALS = 18;
 const USDC_DECIMALS = 6;
 
+const GATEWAY_ADDRESS: string = process.env.GATEWAY_ADDRESS ?? "";
+
 const WETH_ADDRESS: string = process.env.WETH_ADDRESS ?? "";
 const DAI_ADDRESS: string = process.env.DAI_ADDRESS ?? "";
 const USDC_ADDRESS: string = process.env.USDC_ADDRESS ?? "";
@@ -57,6 +59,7 @@ describe("EvmDustTokens", function () {
       "EvmDustTokens"
     );
     dustTokens = await evmDustTokensFactory.deploy(
+      GATEWAY_ADDRESS,
       UNISWAP_ROUTER,
       DAI_ADDRESS,
       WETH_ADDRESS,

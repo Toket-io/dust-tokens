@@ -4,7 +4,10 @@ pragma solidity ^0.8.0;
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
-import "hardhat/console.sol"; // Import Hardhat's console for debugging
+
+import {RevertContext, RevertOptions} from "@zetachain/protocol-contracts/contracts/Revert.sol";
+import "@zetachain/protocol-contracts/contracts/evm/interfaces/IGatewayEVM.sol";
+import {GatewayEVM} from "@zetachain/protocol-contracts/contracts/evm/GatewayEVM.sol";
 
 // Interface for WETH9 to allow withdrawals
 interface IWETH is IERC20 {
@@ -18,6 +21,7 @@ interface IWETH is IERC20 {
 }
 
 contract EvmDustTokens {
+    GatewayEVM public gateway;
     ISwapRouter public immutable swapRouter;
     address public immutable DAI;
     address payable public immutable WETH9;
@@ -44,6 +48,7 @@ contract EvmDustTokens {
     }
 
     constructor(
+        address payable gatewayAddress,
         ISwapRouter _swapRouter,
         address _DAI,
         address payable _WETH9,
