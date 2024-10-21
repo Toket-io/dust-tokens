@@ -30,10 +30,12 @@ const ercAbi = [
   "function transfer(address to, uint amount) returns (bool)",
   "function deposit() public payable",
   "function approve(address spender, uint256 amount) returns (bool)",
+  "function withdraw(uint256 wad) external",
 ];
 
 describe("EvmDustTokens", function () {
   let signer: SignerWithAddress;
+  let receiver: SignerWithAddress;
   let dustTokens: EvmDustTokens;
   let WETH: Contract;
   let DAI: Contract;
@@ -47,6 +49,8 @@ describe("EvmDustTokens", function () {
     // Save Signer
     let signers = await hre.ethers.getSigners();
     signer = signers[0];
+
+    receiver = signers[1];
 
     // Deploy the DustTokens contract
     const evmDustTokensFactory = await hre.ethers.getContractFactory(
@@ -108,6 +112,45 @@ describe("EvmDustTokens", function () {
     );
 
     startBalances = formattedBalances;
+  });
+
+  it("Should withdraw WETH", async function () {
+    // Withdraw some WETH
+    const swapAmount = "1";
+    const amount = hre.ethers.utils.parseEther(swapAmount);
+    const withdrawWETH = await WETH.withdraw(amount);
+    await withdrawWETH.wait();
+
+    // Check native ETH balance
+    const expandedNativeEthBalanceAfter = await signer.getBalance();
+    const nativeEthBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedNativeEthBalanceAfter, DAI_DECIMALS)
+    );
+
+    const nativeEthBalanceBefore = startBalances["nativeEth"];
+    const diff = nativeEthBalanceBefore - nativeEthBalanceAfter;
+
+    console.log(
+      `Native ETH balance - Before: ${nativeEthBalanceBefore}, After: ${nativeEthBalanceAfter}, Diff: ${diff}`
+    );
+
+    expect(nativeEthBalanceAfter).is.greaterThan(nativeEthBalanceBefore);
+
+    // Check WETH balance
+    const expandedWETHBalanceAfter = await WETH.balanceOf(signer.address);
+    const WETHBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedWETHBalanceAfter, DAI_DECIMALS)
+    );
+    const WETHBalanceBefore = startBalances["weth"];
+    const WETHDiff = WETHBalanceBefore - WETHBalanceAfter;
+    console.log(
+      `WETH balance - Before: ${WETHBalanceBefore}, After: ${WETHBalanceAfter}, Diff: ${WETHDiff}`
+    );
+    // Ensure the WETH balance increased after the swap
+    expect(WETHBalanceBefore).to.be.greaterThan(WETHBalanceAfter);
+
+    // Ensure the difference matches the swap amount
+    expect(WETHDiff).to.equal(Number(swapAmount));
   });
 
   it("Should swap WETH for DAI", async function () {
@@ -348,5 +391,163 @@ describe("EvmDustTokens", function () {
     );
     // Ensure the WETH balance increased after the swap
     expect(WETHBalanceAfter).to.be.greaterThan(WETHBalanceBefore);
+  });
+
+  it("Should swap all tokens for NATIVE ETH", async function () {
+    // AMOUNT TO SWAP
+    const swapAmount = "1";
+
+    const expandedWETHBalanceBefore = await WETH.balanceOf(dustTokens.address);
+    const WETHBalanceBefore = Number(
+      hre.ethers.utils.formatUnits(expandedWETHBalanceBefore, DAI_DECIMALS)
+    );
+
+    // ERC-20 Contracts to be swapped, with their names
+    const ercContracts = [
+      { contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
+      { contract: USDC, decimals: USDC_DECIMALS, name: "USDC" },
+      { contract: LINK, decimals: DAI_DECIMALS, name: "LINK" }, // Assuming LINK uses the same decimals as DAI
+      { contract: UNI, decimals: DAI_DECIMALS, name: "UNI" }, // Assuming LINK uses the same decimals as DAI
+      //   { contract: WBTC, decimals: DAI_DECIMALS, name: "WBTC" }, // Assuming LINK uses the same decimals as DAI
+    ];
+
+    // Approve the MultiSwap contract to spend tokens
+    for (const { name, contract, decimals } of ercContracts) {
+      const formattedAmount = hre.ethers.utils.parseUnits(swapAmount, decimals);
+
+      const approveTx = await contract.approve(
+        dustTokens.address,
+        formattedAmount
+      );
+      await approveTx.wait();
+
+      console.log(`${name} approved for MultiSwap`);
+    }
+
+    // Check Initial Balances
+    const beforeBalances = {};
+    for (const { name, contract, decimals } of ercContracts) {
+      const balance = await contract.balanceOf(signer.address);
+      beforeBalances[name] = Number(
+        hre.ethers.utils.formatUnits(balance, decimals)
+      );
+    }
+
+    // Execute the swap
+    const tokenAddresses = ercContracts.map(({ contract }) => contract.address);
+    const swapTx = await dustTokens.executeMultiSwapAndWithdraw(tokenAddresses);
+    await swapTx.wait();
+    console.log("MultiSwap and withdraw executed");
+
+    // Check Result Balances
+    const afterBalances = {};
+    for (const { name, contract, decimals } of ercContracts) {
+      const balance = await contract.balanceOf(signer.address);
+      afterBalances[name] = Number(
+        hre.ethers.utils.formatUnits(balance, decimals)
+      );
+    }
+
+    // Log the balance differences
+    for (const { name } of ercContracts) {
+      const before = beforeBalances[name];
+      const after = afterBalances[name];
+      console.log(
+        `${name} balance - Before: ${before}, After: ${after}, Diff: ${
+          before - after
+        }`
+      );
+    }
+
+    // Assertions: Ensure each token's balance decreased after the swap
+    for (const { name } of ercContracts) {
+      const diff = beforeBalances[name] - afterBalances[name];
+
+      // Ensure the final balance is less than the initial balance
+      expect(afterBalances[name]).to.be.lessThan(beforeBalances[name]);
+
+      // Ensure the difference matches the swap amount
+      expect(diff).to.greaterThanOrEqual(Number(swapAmount) * 0.99);
+    }
+
+    // CONTRACT WETH BALANCE
+    const expandedWETHBalanceAfter = await WETH.balanceOf(dustTokens.address);
+    const WETHBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedWETHBalanceAfter, DAI_DECIMALS)
+    );
+
+    console.log(
+      `WETH balance - Before: ${WETHBalanceBefore}, After: ${WETHBalanceAfter}, Diff: ${
+        WETHBalanceBefore - WETHBalanceAfter
+      }`
+    );
+
+    // Check native balance
+    const expandedNativeEthBalanceAfter = await signer.getBalance();
+    const nativeEthBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedNativeEthBalanceAfter, DAI_DECIMALS)
+    );
+
+    const nativeEthBalanceBefore = startBalances["nativeEth"];
+    const diff = nativeEthBalanceAfter - nativeEthBalanceBefore;
+
+    console.log(
+      `Native ETH balance - Before: ${nativeEthBalanceBefore}, After: ${nativeEthBalanceAfter}, Diff: ${diff}`
+    );
+
+    expect(nativeEthBalanceAfter).is.greaterThan(nativeEthBalanceBefore);
+  });
+
+  it("Should deposit and withdraw WETH from contract", async function () {
+    const depositAmount = hre.ethers.utils.parseEther("0.5");
+    const withdrawAmount = hre.ethers.utils.parseEther("0.5");
+
+    const signerBalanceBefore = await receiver.getBalance();
+
+    console.log(
+      "Signer ETH Balance before deposit:",
+      signerBalanceBefore.toString()
+    );
+
+    // Perform deposit
+    const depositTx = await dustTokens.TestDeposit({ value: depositAmount });
+    await depositTx.wait();
+
+    // Verify balance after deposit
+    const wethBalance = await dustTokens.TestGetBalance();
+    expect(wethBalance).to.equal(depositAmount);
+
+    // Perform withdrawal
+    const withdrawTx = await dustTokens.TestWithdrawToCaller(
+      receiver.address,
+      withdrawAmount
+    );
+    await withdrawTx.wait();
+
+    // Check if ETH has been transferred correctly (you may need a helper to check balance)
+    const contractBalanceAfter = await dustTokens.TestGetBalance();
+
+    console.log(
+      "Contract ETH Balance after withdrawal:",
+      contractBalanceAfter.toString()
+    );
+
+    // Check if the contract balance is 0
+    expect(contractBalanceAfter).to.equal(0);
+
+    // Check if the signer balance has increased
+    const signerBalanceAfter = await receiver.getBalance();
+    console.log(
+      "Signer ETH Balance after withdrawal:",
+      signerBalanceAfter.toString()
+    );
+
+    // Check signer balance diff (should be equal to the withdraw amount)
+    const diff = signerBalanceAfter.sub(signerBalanceBefore);
+
+    console.log("Diff:", hre.ethers.utils.formatEther(diff));
+
+    // Check if the signer balance has increased
+    expect(diff).to.be.equal(withdrawAmount);
   });
 });

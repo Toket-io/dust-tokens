@@ -6,10 +6,21 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 import "hardhat/console.sol"; // Import Hardhat's console for debugging
 
+// Interface for WETH9 to allow withdrawals
+interface IWETH is IERC20 {
+    receive() external payable;
+
+    function deposit() external payable;
+
+    function withdraw(uint256 amount) external;
+
+    function withdrawTo(address account, uint256 amount) external;
+}
+
 contract EvmDustTokens {
     ISwapRouter public immutable swapRouter;
     address public immutable DAI;
-    address public immutable WETH9;
+    address payable public immutable WETH9;
     address public immutable USDC;
     address public immutable LINK;
     address public immutable UNI;
@@ -17,10 +28,25 @@ contract EvmDustTokens {
 
     uint24 public constant feeTier = 3000;
 
+    // Define the event to track the swaps
+    event MultiSwapExecuted(address indexed executor, PerformedSwap[] swaps);
+    event MultiSwapExecutedAndWithdrawn(
+        address indexed executor,
+        uint256 totalWethReceived
+    );
+
+    // Define the PerformedSwap struct
+    struct PerformedSwap {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountIn;
+        uint256 amountOut;
+    }
+
     constructor(
         ISwapRouter _swapRouter,
         address _DAI,
-        address _WETH9,
+        address payable _WETH9,
         address _USDC,
         address _LINK,
         address _UNI,
@@ -240,14 +266,72 @@ contract EvmDustTokens {
         emit MultiSwapExecuted(msg.sender, performedSwaps);
     }
 
-    // Define the event to track the swaps
-    event MultiSwapExecuted(address indexed executor, PerformedSwap[] swaps);
+    function executeMultiSwapAndWithdraw(
+        address[] memory tokenAddresses
+    ) external {
+        uint256 totalWethReceived = 0;
 
-    // Define the PerformedSwap struct
-    struct PerformedSwap {
-        address tokenIn;
-        address tokenOut;
-        uint256 amountIn;
-        uint256 amountOut;
+        // Loop through each ERC-20 token address provided
+        for (uint256 i = 0; i < tokenAddresses.length; i++) {
+            address token = tokenAddresses[i];
+
+            // Check allowance and balance
+            uint256 allowance = IERC20(token).allowance(
+                msg.sender,
+                address(this)
+            );
+            require(allowance > 0, "Insufficient allowance for token");
+
+            uint256 balance = IERC20(token).balanceOf(msg.sender);
+            require(balance >= allowance, "Insufficient token balance");
+
+            // Transfer token from user to this contract
+            TransferHelper.safeTransferFrom(
+                token,
+                msg.sender,
+                address(this),
+                allowance
+            );
+
+            // Approve the swap router to spend the token
+            TransferHelper.safeApprove(token, address(swapRouter), allowance);
+
+            // Build Uniswap Swap to convert the token to WETH
+            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+                .ExactInputSingleParams({
+                    tokenIn: token,
+                    tokenOut: WETH9,
+                    fee: 3000,
+                    recipient: address(this), // Swap to this contract
+                    deadline: block.timestamp,
+                    amountIn: allowance,
+                    amountOutMinimum: 1, // Adjust for slippage tolerance
+                    sqrtPriceLimitX96: 0
+                });
+
+            // Perform the swap
+            uint256 amountOut = swapRouter.exactInputSingle(params);
+            totalWethReceived += amountOut;
+        }
+
+        // Convert WETH to native ETH
+        IWETH(WETH9).withdrawTo(msg.sender, totalWethReceived);
+        // IWETH(WETH9).withdraw(totalWethReceived);
+
+        emit MultiSwapExecutedAndWithdrawn(msg.sender, totalWethReceived);
+    }
+
+    function TestDeposit() external payable {
+        IWETH(WETH9).deposit{value: msg.value}();
+    }
+
+    function TestWithdrawToCaller(address receiver, uint256 amount) external {
+        uint256 balance = IWETH(WETH9).balanceOf(address(this));
+        require(balance >= amount, "Not enough WETH to withdraw");
+        IWETH(WETH9).withdrawTo(receiver, amount);
+    }
+
+    function TestGetBalance() external view returns (uint256) {
+        return IWETH(WETH9).balanceOf(address(this));
     }
 }
