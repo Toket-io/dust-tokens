@@ -1,11 +1,28 @@
-import React from "react";
+import React, { useState } from "react";
+import Image from "next/image";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { ArcherContainer, ArcherElement } from "react-archer";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 
 const containerStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  height: "500px",
+  height: "750px",
   width: "100%",
   margin: "50px 0",
 };
@@ -31,61 +48,63 @@ const boxStyle = {
   marginBottom: "20px",
 };
 
+const tokens = [
+  { value: "btc", label: "Bitcoin (BTC)" },
+  { value: "eth", label: "Ethereum (ETH)" },
+  { value: "usdt", label: "Tether (USDT)" },
+  { value: "bnb", label: "Binance Coin (BNB)" },
+  { value: "usdc", label: "USD Coin (USDC)" },
+  { value: "xrp", label: "Ripple (XRP)" },
+  { value: "ada", label: "Cardano (ADA)" },
+  { value: "doge", label: "Dogecoin (DOGE)" },
+];
+
 const SecondExample = () => {
-  const [nbElements, setNbElements] = React.useState(3);
-  const [labels, setLabels] = React.useState("hello");
+  const [open, setOpen] = useState(false);
+  const [selectedTokens, setSelectedTokens] = useState<
+    { value: string; label: string; amount: string; isMax: boolean }[]
+  >([]);
+
+  const handleSelect = (token: { value: string; label: string }) => {
+    if (
+      selectedTokens.length < 5 &&
+      !selectedTokens.some((t) => t.value === token.value)
+    ) {
+      setSelectedTokens([
+        ...selectedTokens,
+        { ...token, amount: "", isMax: false },
+      ]);
+    }
+  };
 
   return (
     <div>
-      <div>
-        <div>Change labels</div>
-        <input
-          data-cy="change-labels-input"
-          type="text"
-          onChange={(event) => setLabels(event.currentTarget.value)}
-        />
-      </div>
-      <div>
-        <div>Add elements</div>
-        <button
-          data-cy="add-element"
-          onClick={() => setNbElements(nbElements + 1)}
-        >
-          +
-        </button>
-        <button
-          onClick={() => setNbElements(nbElements > 1 ? nbElements - 1 : 0)}
-        >
-          -
-        </button>
-      </div>
-
-      <ArcherContainer strokeColor="red">
+      <ArcherContainer strokeColor="white">
         <div style={containerStyle}>
           {/* Left column with elements */}
           <div style={columnStyle}>
-            {Array(nbElements)
-              .fill(0)
-              .map((_, i) => (
-                <ArcherElement
-                  key={`element${i}`}
-                  id={`element${i}`}
-                  relations={[
-                    {
-                      targetId: "root",
-                      targetAnchor: "left",
-                      sourceAnchor: "right",
-                      //   label: (
-                      //     <div>
-                      //       {i} {labels}
-                      //     </div>
-                      //   ),
-                    },
-                  ]}
-                >
-                  <div style={boxStyle}>Element {i}</div>
-                </ArcherElement>
-              ))}
+            {selectedTokens.map((token, i) => (
+              <ArcherElement
+                key={`element${i}`}
+                id={`element${i}`}
+                relations={[
+                  {
+                    targetId: "root",
+                    targetAnchor: "left",
+                    sourceAnchor: "right",
+                    //   label: (
+                    //     <div>
+                    //       {i} {labels}
+                    //     </div>
+                    //   ),
+                  },
+                ]}
+              >
+                <div className="bg-white text-black rounded-full py-2 px-4 mb-4">
+                  {token.label}
+                </div>
+              </ArcherElement>
+            ))}
             <ArcherElement
               key={"select"}
               id={"select"}
@@ -103,7 +122,58 @@ const SecondExample = () => {
                 },
               ]}
             >
-              <div style={boxStyle}>Select</div>
+              <div>
+                <Popover open={open} onOpenChange={setOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={open}
+                      className="w-full justify-between"
+                    >
+                      Select token
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Search tokens..." />
+                      <CommandList>
+                        <CommandEmpty>No token found.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem>Testing</CommandItem>
+                        </CommandGroup>
+                        <CommandGroup>
+                          {tokens.map((token) => (
+                            <CommandItem
+                              key={token.value}
+                              onSelect={() => handleSelect(token)}
+                              disabled={
+                                selectedTokens.length >= 5 ||
+                                selectedTokens.some(
+                                  (t) => t.value === token.value
+                                )
+                              }
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedTokens.some(
+                                    (t) => t.value === token.value
+                                  )
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              {token.label}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </ArcherElement>
           </div>
 
@@ -120,14 +190,24 @@ const SecondExample = () => {
                 },
               ]}
             >
-              <div style={boxStyle}>ZETACHAIN</div>
+              <div>
+                <Image
+                  src="/assets/zetachain-icon.svg"
+                  alt="Zetachain Logo"
+                  width={120}
+                  height={120}
+                />
+                <h1 className="text-2xl text-center font-bold mt-2">
+                  Zetachain
+                </h1>
+              </div>
             </ArcherElement>
           </div>
 
           {/* Additional element to the right of the root */}
           <div style={columnStyle}>
             <ArcherElement id="right-element">
-              <div style={boxStyle}>Right Element</div>
+              <div style={boxStyle}>Select Network</div>
             </ArcherElement>
           </div>
         </div>

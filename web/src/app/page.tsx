@@ -320,7 +320,6 @@ const Page = () => {
       </div>
       {/* <Welcome /> */}
       <div className="bg-gray-800 p-8">
-        <TokenSwapSelector />
         <ArcherDemo />
       </div>
       <div className="flex justify-center items-center">
