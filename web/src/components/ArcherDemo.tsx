@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import Image from "next/image";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ArcherContainer, ArcherElement } from "react-archer";
+
 import {
   Command,
   CommandEmpty,
@@ -59,13 +60,26 @@ const tokens = [
   { value: "doge", label: "Dogecoin (DOGE)" },
 ];
 
-const SecondExample = () => {
-  const [open, setOpen] = useState(false);
+const networks = [
+  { value: "ethereum", label: "Ethereum" },
+  { value: "binance", label: "Binance Smart Chain" },
+  { value: "polygon", label: "Polygon" },
+  { value: "avalanche", label: "Avalanche" },
+  { value: "solana", label: "Solana" },
+];
+
+export default function Component() {
+  const [openToken, setOpenToken] = useState(false);
+  const [openNetwork, setOpenNetwork] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<
     { value: string; label: string; amount: string; isMax: boolean }[]
   >([]);
+  const [selectedNetwork, setSelectedNetwork] = useState<{
+    value: string;
+    label: string;
+  } | null>(null);
 
-  const handleSelect = (token: { value: string; label: string }) => {
+  const handleSelectToken = (token: { value: string; label: string }) => {
     if (
       selectedTokens.length < 5 &&
       !selectedTokens.some((t) => t.value === token.value)
@@ -74,7 +88,19 @@ const SecondExample = () => {
         ...selectedTokens,
         { ...token, amount: "", isMax: false },
       ]);
+    } else {
+      setSelectedTokens(selectedTokens.filter((t) => t.value !== token.value));
     }
+    setOpenToken(false);
+  };
+
+  const handleRemoveToken = (tokenValue: string) => {
+    setSelectedTokens(selectedTokens.filter((t) => t.value !== tokenValue));
+  };
+
+  const handleSelectNetwork = (network: { value: string; label: string }) => {
+    setSelectedNetwork(network);
+    setOpenNetwork(false);
   };
 
   return (
@@ -92,16 +118,19 @@ const SecondExample = () => {
                     targetId: "root",
                     targetAnchor: "left",
                     sourceAnchor: "right",
-                    //   label: (
-                    //     <div>
-                    //       {i} {labels}
-                    //     </div>
-                    //   ),
                   },
                 ]}
               >
-                <div className="bg-white text-black rounded-full py-2 px-4 mb-4">
+                <div className="bg-white text-black rounded-full py-2 px-4 mb-4 flex items-center">
                   {token.label}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="ml-2"
+                    onClick={() => handleRemoveToken(token.value)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               </ArcherElement>
             ))}
@@ -114,21 +143,16 @@ const SecondExample = () => {
                   targetAnchor: "left",
                   sourceAnchor: "right",
                   style: { strokeDasharray: "5,5" },
-                  //   label: (
-                  //     <div>
-                  //       {i} {labels}
-                  //     </div>
-                  //   ),
                 },
               ]}
             >
               <div>
-                <Popover open={open} onOpenChange={setOpen}>
+                <Popover open={openToken} onOpenChange={setOpenToken}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       role="combobox"
-                      aria-expanded={open}
+                      aria-expanded={openToken}
                       className="w-full justify-between"
                     >
                       Select token
@@ -141,19 +165,10 @@ const SecondExample = () => {
                       <CommandList>
                         <CommandEmpty>No token found.</CommandEmpty>
                         <CommandGroup>
-                          <CommandItem>Testing</CommandItem>
-                        </CommandGroup>
-                        <CommandGroup>
                           {tokens.map((token) => (
                             <CommandItem
                               key={token.value}
-                              onSelect={() => handleSelect(token)}
-                              disabled={
-                                selectedTokens.length >= 5 ||
-                                selectedTokens.some(
-                                  (t) => t.value === token.value
-                                )
-                              }
+                              onSelect={() => handleSelectToken(token)}
                             >
                               <Check
                                 className={cn(
@@ -186,7 +201,6 @@ const SecondExample = () => {
                   targetId: "right-element",
                   targetAnchor: "left",
                   sourceAnchor: "right",
-                  //   label: <div>Connected to Root</div>,
                 },
               ]}
             >
@@ -197,9 +211,9 @@ const SecondExample = () => {
                   width={120}
                   height={120}
                 />
-                <h1 className="text-2xl text-center font-bold mt-2">
+                {/* <h1 className="text-2xl text-center font-bold mt-2">
                   Zetachain
-                </h1>
+                </h1> */}
               </div>
             </ArcherElement>
           </div>
@@ -207,13 +221,51 @@ const SecondExample = () => {
           {/* Additional element to the right of the root */}
           <div style={columnStyle}>
             <ArcherElement id="right-element">
-              <div style={boxStyle}>Select Network</div>
+              <div>
+                <Popover open={openNetwork} onOpenChange={setOpenNetwork}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openNetwork}
+                      className="w-full justify-between"
+                    >
+                      {selectedNetwork?.label || "Select Network"}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Search networks..." />
+                      <CommandList>
+                        <CommandEmpty>No network found.</CommandEmpty>
+                        <CommandGroup>
+                          {networks.map((network) => (
+                            <CommandItem
+                              key={network.value}
+                              onSelect={() => handleSelectNetwork(network)}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedNetwork?.value === network.value
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                              {network.label}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </ArcherElement>
           </div>
         </div>
       </ArcherContainer>
     </div>
   );
-};
-
-export default SecondExample;
+}
