@@ -29,6 +29,7 @@ import ForkCheck from "../components/ForkCheck";
 import TokenSwapSelector from "@/components/TokenSwapSelector";
 import { evmAddresses, zetaAddresses } from "@/zetachain";
 import { Button } from "@/components/ui/button";
+import ArcherDemo from "@/components/ArcherDemo";
 
 const hardhatAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
@@ -318,8 +319,9 @@ const Page = () => {
         <ConnectButton label="Connect EVM" showBalance={true} />
       </div>
       {/* <Welcome /> */}
-      <div className="bg-white p-8">
+      <div className="bg-gray-800 p-8">
         <TokenSwapSelector />
+        <ArcherDemo />
       </div>
       <div className="flex justify-center items-center">
         <div className="flex flex-row space-x-6">
