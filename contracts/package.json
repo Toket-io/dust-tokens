@@ -11,6 +11,7 @@
     "swap": "npx hardhat swap --network localhost",
     "balance": "npx hardhat balance --network localhost",
     "localnet": "npx hardhat localnet --network localhost",
+    "localnet:arbitrum": "npx hardhat localnet --anvil --fork-url=https://arb1.arbitrum.io/rpc --network localhost",
     "test": "npx hardhat test --network localhost"
   },
   "keywords": [],

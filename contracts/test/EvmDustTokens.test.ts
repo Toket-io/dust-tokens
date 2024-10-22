@@ -656,4 +656,113 @@ describe("EvmDustTokens", function () {
     // Check if the signer balance has increased
     expect(diff).to.be.equal(withdrawAmount);
   });
+
+  it("Should swap all tokens for USDC and deposit in Gateway", async function () {
+    // AMOUNT TO SWAP
+    const swapAmount = "1";
+
+    const expandedUSDCBalanceBefore = await USDC.balanceOf(signer.address);
+    const USDCBalanceBefore = Number(
+      hre.ethers.utils.formatUnits(expandedUSDCBalanceBefore, USDC_DECIMALS)
+    );
+
+    // ERC-20 Contracts to be swapped, with their names
+    const ercContracts = [
+      { contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
+      { contract: WETH, decimals: DAI_DECIMALS, name: "WETH" },
+      { contract: LINK, decimals: DAI_DECIMALS, name: "LINK" },
+      { contract: UNI, decimals: DAI_DECIMALS, name: "UNI" },
+    ];
+
+    // Approve the MultiSwap contract to spend tokens
+    for (const { name, contract, decimals } of ercContracts) {
+      const formattedAmount = hre.ethers.utils.parseUnits(swapAmount, decimals);
+
+      const approveTx = await contract.approve(
+        dustTokens.address,
+        formattedAmount
+      );
+      await approveTx.wait();
+
+      console.log(`${name} approved for MultiSwap`);
+    }
+
+    // Check Initial Balances
+    const beforeBalances = {};
+    for (const { name, contract, decimals } of ercContracts) {
+      const balance = await contract.balanceOf(signer.address);
+      beforeBalances[name] = Number(
+        hre.ethers.utils.formatUnits(balance, decimals)
+      );
+    }
+
+    // Execute the swap
+    const tokenAddresses = ercContracts.map(({ contract }) => contract.address);
+    const swapTx = await dustTokens.multiSwapAndDepositAndCall(tokenAddresses);
+    const receipt = await swapTx.wait(); // Wait for the transaction to be mined
+
+    // Extract the totalReceived value from the emitted event
+    const event = receipt.events?.find(
+      (e) => e.event === "MultiSwapExecutedAndWithdrawn"
+    );
+    const totalReceived = event?.args?.totalWethReceived;
+    const formmateTotalReceived = hre.ethers.utils.formatUnits(
+      totalReceived,
+      USDC_DECIMALS
+    );
+
+    console.log(`Total received in USDC: ${formmateTotalReceived}`);
+
+    // Check Result Balances
+    const afterBalances = {};
+    for (const { name, contract, decimals } of ercContracts) {
+      const balance = await contract.balanceOf(signer.address);
+      afterBalances[name] = Number(
+        hre.ethers.utils.formatUnits(balance, decimals)
+      );
+    }
+
+    // Log the balance differences
+    for (const { name } of ercContracts) {
+      const before = beforeBalances[name];
+      const after = afterBalances[name];
+      console.log(
+        `${name} balance - Before: ${before}, After: ${after}, Diff: ${
+          before - after
+        }`
+      );
+    }
+
+    // Assertions: Ensure each token's balance decreased after the swap
+    for (const { name } of ercContracts) {
+      const diff = beforeBalances[name] - afterBalances[name];
+
+      // Ensure the final balance is less than the initial balance
+      expect(afterBalances[name]).to.be.lessThan(beforeBalances[name]);
+
+      // Ensure the difference matches the swap amount
+      expect(diff).to.greaterThanOrEqual(Number(swapAmount) * 0.99);
+    }
+
+    // CONTRACT WETH BALANCE
+    const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
+    const USDCBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
+    );
+    const USDCDiff = USDCBalanceBefore - USDCBalanceAfter;
+
+    console.log(
+      `USDC balance - Before: ${USDCBalanceBefore}, After: ${USDCBalanceAfter}, Diff: ${USDCDiff}`
+    );
+
+    expect(USDCBalanceAfter).is.greaterThan(USDCBalanceBefore);
+  });
+
+  it("Test deposit directly", async function () {
+    const depositAmount = hre.ethers.utils.parseEther("0.5");
+    const tx = await dustTokens.swapAndDeposit(receiver.address, {
+      value: depositAmount,
+    });
+    await tx.wait();
+  });
 });

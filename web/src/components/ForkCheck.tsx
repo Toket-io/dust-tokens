@@ -1,6 +1,6 @@
 import { useChainId, useReadContract } from "wagmi";
 
-const USDC_CONTRACT_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"; // Mainnet USDC
+const USDC_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS!;
 
 const usdcABI = [
   {

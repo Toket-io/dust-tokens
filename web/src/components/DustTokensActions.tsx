@@ -2,7 +2,7 @@ import React from "react";
 import { ethers } from "ethers";
 import { erc20Abi, formatUnits, parseEther } from "viem"; // Using viem for formatting
 import EvmDustTokens from "../../../contracts/artifacts/contracts/EvmDustTokens.sol/EvmDustTokens.json";
-import { evmAddresses, zetaAddresses } from "../app/page";
+import { evmAddresses, zetaAddresses } from "@/zetachain";
 
 const evmDustTokenAddress = "0xC1dC7a8379885676a6Ea08E67b7Defd9a235De71";
 
