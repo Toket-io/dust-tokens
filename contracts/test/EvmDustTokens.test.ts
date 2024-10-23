@@ -802,6 +802,9 @@ describe("EvmDustTokens", function () {
     await tx.wait();
     expect(tx).not.reverted;
 
+    // Wait for 1 second
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     // Check if ZETA_ETH balance has increased
     const expandedZETA_ETHBalanceAfter = await ZETA_ETH.balanceOf(
       signer.address
@@ -810,17 +813,17 @@ describe("EvmDustTokens", function () {
       hre.ethers.utils.formatUnits(expandedZETA_ETHBalanceAfter, DAI_DECIMALS)
     );
 
-    await setTimeout(() => {
-      console.log("Checking ZETA_ETH balance after 1 second");
-    }, 1000);
-
     const ZETA_ETHBalanceBefore = startBalances["zeta_eth"];
-    const ZETA_ETHDiff = ZETA_ETHBalanceBefore - ZETA_ETHBalanceAfter;
+    const ZETA_ETHDiff = ZETA_ETHBalanceAfter - ZETA_ETHBalanceBefore;
     console.log(
       `ZETA_ETH balance - Before: ${ZETA_ETHBalanceBefore}, After: ${ZETA_ETHBalanceAfter}, Diff: ${ZETA_ETHDiff}`
     );
-    // Ensure the WETH balance increased after the swap
-    expect(ZETA_ETHBalanceBefore).to.be.greaterThan(ZETA_ETHBalanceAfter);
+
+    // Ensure the ZETA_ETH balance increased after the deposit
+    expect(ZETA_ETHBalanceAfter).to.be.greaterThan(ZETA_ETHBalanceBefore);
+    expect(ZETA_ETHDiff).to.equal(
+      Number(hre.ethers.utils.formatEther(depositAmount))
+    );
   });
 
   });
