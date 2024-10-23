@@ -61,11 +61,10 @@ const tokens = [
 ];
 
 const networks = [
-  { value: "ethereum", label: "Ethereum" },
-  { value: "binance", label: "Binance Smart Chain" },
-  { value: "polygon", label: "Polygon" },
-  { value: "avalanche", label: "Avalanche" },
-  { value: "solana", label: "Solana" },
+  { value: "ethereum", label: "Ethereum", enabled: true },
+  { value: "binance", label: "Binance Smart Chain", enabled: false },
+  { value: "polygon", label: "Polygon", enabled: false },
+  { value: "solana", label: "Solana", enabled: false },
 ];
 
 export default function Component() {
@@ -243,6 +242,7 @@ export default function Component() {
                           {networks.map((network) => (
                             <CommandItem
                               key={network.value}
+                              disabled={!network.enabled}
                               onSelect={() => handleSelectNetwork(network)}
                             >
                               <Check
