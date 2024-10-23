@@ -3,7 +3,6 @@ import Image from "next/image";
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ArcherContainer, ArcherElement } from "react-archer";
-
 import {
   Command,
   CommandEmpty,
@@ -11,6 +10,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandShortcut,
 } from "@/components/ui/command";
 import {
   Popover,
@@ -18,6 +18,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const containerStyle = {
   display: "flex",
@@ -50,14 +51,14 @@ const boxStyle = {
 };
 
 const tokens = [
-  { value: "btc", label: "Bitcoin (BTC)" },
-  { value: "eth", label: "Ethereum (ETH)" },
-  { value: "usdt", label: "Tether (USDT)" },
-  { value: "bnb", label: "Binance Coin (BNB)" },
-  { value: "usdc", label: "USD Coin (USDC)" },
-  { value: "xrp", label: "Ripple (XRP)" },
-  { value: "ada", label: "Cardano (ADA)" },
-  { value: "doge", label: "Dogecoin (DOGE)" },
+  { value: "btc", label: "Bitcoin (BTC)", balance: 0.5 },
+  { value: "eth", label: "Ethereum (ETH)", balance: 2.3 },
+  { value: "usdt", label: "Tether (USDT)", balance: 1000 },
+  { value: "bnb", label: "Binance Coin (BNB)", balance: 10 },
+  { value: "usdc", label: "USD Coin (USDC)", balance: 500 },
+  { value: "xrp", label: "Ripple (XRP)", balance: 0 },
+  { value: "ada", label: "Cardano (ADA)", balance: 0 },
+  { value: "doge", label: "Dogecoin (DOGE)", balance: 1000 },
 ];
 
 const networks = [
@@ -71,14 +72,24 @@ export default function Component() {
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<
-    { value: string; label: string; amount: string; isMax: boolean }[]
+    {
+      value: string;
+      label: string;
+      amount: string;
+      balance: number;
+      isMax: boolean;
+    }[]
   >([]);
   const [selectedNetwork, setSelectedNetwork] = useState<{
     value: string;
     label: string;
   } | null>(null);
 
-  const handleSelectToken = (token: { value: string; label: string }) => {
+  const handleSelectToken = (token: {
+    value: string;
+    label: string;
+    balance: number;
+  }) => {
     if (
       selectedTokens.length < 5 &&
       !selectedTokens.some((t) => t.value === token.value)
@@ -102,6 +113,26 @@ export default function Component() {
     setOpenNetwork(false);
   };
 
+  const handleAmountChange = (tokenValue: string, amount: string) => {
+    setSelectedTokens(
+      selectedTokens.map((token) =>
+        token.value === tokenValue ? { ...token, amount, isMax: false } : token
+      )
+    );
+  };
+
+  const handleMaxAmount = (tokenValue: string) => {
+    setSelectedTokens(
+      selectedTokens.map((token) =>
+        token.value === tokenValue
+          ? { ...token, amount: token.balance.toString(), isMax: true }
+          : token
+      )
+    );
+  };
+
+  const sortedTokens = [...tokens].sort((a, b) => b.balance - a.balance);
+
   return (
     <div>
       <ArcherContainer strokeColor="white">
@@ -120,16 +151,38 @@ export default function Component() {
                   },
                 ]}
               >
-                <div className="bg-white text-black rounded-full py-2 px-4 mb-4 flex items-center">
-                  {token.label}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="ml-2"
-                    onClick={() => handleRemoveToken(token.value)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                <div className="bg-white text-black rounded-lg py-2 px-4 mb-4 flex flex-col items-start w-64">
+                  <div className="flex justify-between w-full mb-2">
+                    <span>{token.label}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveToken(token.value)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex items-center w-full">
+                    <Input
+                      type="number"
+                      value={token.amount}
+                      onChange={(e) =>
+                        handleAmountChange(token.value, e.target.value)
+                      }
+                      className="w-full mr-2"
+                      placeholder="Amount"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleMaxAmount(token.value)}
+                      className={cn(
+                        token.isMax && "bg-primary text-primary-foreground"
+                      )}
+                    >
+                      Max
+                    </Button>
+                  </div>
                 </div>
               </ArcherElement>
             ))}
@@ -145,7 +198,7 @@ export default function Component() {
                 },
               ]}
             >
-              <div>
+              <div className="w-64">
                 <Popover open={openToken} onOpenChange={setOpenToken}>
                   <PopoverTrigger asChild>
                     <Button
@@ -164,10 +217,13 @@ export default function Component() {
                       <CommandList>
                         <CommandEmpty>No token found.</CommandEmpty>
                         <CommandGroup>
-                          {tokens.map((token) => (
+                          {sortedTokens.map((token) => (
                             <CommandItem
                               key={token.value}
                               onSelect={() => handleSelectToken(token)}
+                              className={cn(
+                                token.balance === 0 && "opacity-50"
+                              )}
                             >
                               <Check
                                 className={cn(
@@ -179,7 +235,10 @@ export default function Component() {
                                     : "opacity-0"
                                 )}
                               />
-                              {token.label}
+                              <span className="flex-1">{token.label}</span>
+                              <CommandShortcut>
+                                {token.balance.toFixed(2)}
+                              </CommandShortcut>
                             </CommandItem>
                           ))}
                         </CommandGroup>
