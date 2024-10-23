@@ -142,6 +142,9 @@ describe("EvmDustTokens", function () {
       zeta_eth: Number(
         hre.ethers.utils.formatUnits(balances.zeta_eth, DAI_DECIMALS)
       ),
+      zeta_usdc_eth: Number(
+        hre.ethers.utils.formatUnits(balances.zeta_usdc_eth, DAI_DECIMALS)
+      ),
     };
 
     console.log(
@@ -832,8 +835,8 @@ describe("EvmDustTokens", function () {
     const args = {
       amount: "10",
       erc20: null,
-      gatewayEvm: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-      receiver: "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E",
+      gatewayEvm: GATEWAY_ADDRESS,
+      receiver: universalApp.address,
       revertOptions: {
         callOnRevert: false,
         onRevertGasLimit: 7000000,
@@ -848,10 +851,7 @@ describe("EvmDustTokens", function () {
         },
       },
       types: ["address", "bytes"],
-      values: [
-        "0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c",
-        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-      ],
+      values: [ZETA_USDC_ETH_ADDRESS, signer.address],
     };
 
     const revertOptions = {
@@ -863,17 +863,6 @@ describe("EvmDustTokens", function () {
         hre.ethers.utils.toUtf8Bytes(args.revertOptions.revertMessage)
       ),
     };
-
-    // const args = {
-    //   amount: "100",
-    //   erc20: null,
-    //   gatewayEvm: GATEWAY_ADDRESS,
-    //   receiver: "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E",
-    //   types: ["address", "bytes"],
-    //   values: [ZETA_USDC_ETH_ADDRESS, signer.address],
-    // };
-
-    console.log("Args:", args);
 
     // Prepare encoded parameters for the call
     const valuesArray = args.values.map((value, index) => {
@@ -908,6 +897,21 @@ describe("EvmDustTokens", function () {
 
     expect(tx).not.reverted;
 
-    // Check if the contract balance has increased
+    // Wait for 1 second
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Check if USDC balance has increased
+    const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
+    const UsdcBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
+    );
+    const UsdcBalanceBefore = startBalances["usdc"];
+    const UsdcDiff = UsdcBalanceAfter - UsdcBalanceBefore;
+
+    console.log(
+      `USDC balance - Before: ${UsdcBalanceBefore}, After: ${UsdcBalanceAfter}, Diff: ${UsdcDiff}`
+    );
+
+    expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
   });
 });
