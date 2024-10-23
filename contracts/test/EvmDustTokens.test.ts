@@ -826,17 +826,52 @@ describe("EvmDustTokens", function () {
     );
   });
 
-  it("Test deposit and call directly", async function () {
+  it.only("Test deposit and call directly", async function () {
     const depositAmount = hre.ethers.utils.parseEther("0.5");
 
     const args = {
-      amount: "100",
+      amount: "10",
       erc20: null,
-      gatewayEvm: GATEWAY_ADDRESS,
-      receiver: universalApp.address,
+      gatewayEvm: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+      receiver: "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E",
+      revertOptions: {
+        callOnRevert: false,
+        onRevertGasLimit: 7000000,
+        revertAddress: "0x0000000000000000000000000000000000000000",
+        revertMessage: "0x",
+      },
+      txOptions: {
+        gasLimit: 1000000,
+        gasPrice: {
+          hex: "0x3b9aca00",
+          type: "BigNumber",
+        },
+      },
       types: ["address", "bytes"],
-      values: [ZETA_USDC_ETH_ADDRESS, signer.address],
+      values: [
+        "0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c",
+        "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      ],
     };
+
+    const revertOptions = {
+      abortAddress: "0x0000000000000000000000000000000000000000", // not used
+      callOnRevert: args.revertOptions.callOnRevert,
+      onRevertGasLimit: args.revertOptions.onRevertGasLimit,
+      revertAddress: args.revertOptions.revertAddress,
+      revertMessage: hre.ethers.utils.hexlify(
+        hre.ethers.utils.toUtf8Bytes(args.revertOptions.revertMessage)
+      ),
+    };
+
+    // const args = {
+    //   amount: "100",
+    //   erc20: null,
+    //   gatewayEvm: GATEWAY_ADDRESS,
+    //   receiver: "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E",
+    //   types: ["address", "bytes"],
+    //   values: [ZETA_USDC_ETH_ADDRESS, signer.address],
+    // };
 
     console.log("Args:", args);
 
@@ -862,8 +897,9 @@ describe("EvmDustTokens", function () {
     );
 
     const tx = await dustTokens.TestGatewayDepositAndCall(
-      receiver.address,
+      universalApp.address,
       encodedParameters,
+      revertOptions,
       {
         value: depositAmount,
       }

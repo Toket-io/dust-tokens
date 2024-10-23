@@ -377,21 +377,16 @@ contract EvmDustTokens {
     }
 
     function TestGatewayDepositAndCall(
-        bytes memory recipient,
-        bytes memory encodedParams
+        address receiver,
+        bytes calldata payload,
+        RevertOptions calldata revertOptions
     ) external payable {
         require(msg.value > 0, "No ETH sent");
 
         gateway.depositAndCall{value: msg.value}(
-            address(uint160(bytes20(recipient))), // Ensure valid recipient address,
-            encodedParams,
-            RevertOptions({
-                revertAddress: address(0),
-                callOnRevert: false,
-                abortAddress: address(0),
-                revertMessage: "",
-                onRevertGasLimit: 0
-            })
+            receiver,
+            payload,
+            revertOptions
         );
     }
 }
