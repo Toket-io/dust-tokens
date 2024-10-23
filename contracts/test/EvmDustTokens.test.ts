@@ -794,7 +794,7 @@ describe("EvmDustTokens", function () {
     expect(USDCBalanceAfter).is.greaterThan(USDCBalanceBefore);
   });
 
-  it.only("Test deposit directly", async function () {
+  it("Test deposit directly", async function () {
     const depositAmount = hre.ethers.utils.parseEther("0.5");
     const tx = await dustTokens.TestGatewayDeposit(signer.address, {
       value: depositAmount,
@@ -826,5 +826,52 @@ describe("EvmDustTokens", function () {
     );
   });
 
+  it("Test deposit and call directly", async function () {
+    const depositAmount = hre.ethers.utils.parseEther("0.5");
+
+    const args = {
+      amount: "100",
+      erc20: null,
+      gatewayEvm: GATEWAY_ADDRESS,
+      receiver: universalApp.address,
+      types: ["address", "bytes"],
+      values: [ZETA_USDC_ETH_ADDRESS, signer.address],
+    };
+
+    console.log("Args:", args);
+
+    // Prepare encoded parameters for the call
+    const valuesArray = args.values.map((value, index) => {
+      const type = args.types[index];
+      if (type === "bool") {
+        try {
+          return JSON.parse(value.toLowerCase());
+        } catch (e) {
+          throw new Error(`Invalid boolean value: ${value}`);
+        }
+      } else if (type.startsWith("uint") || type.startsWith("int")) {
+        return hre.ethers.BigNumber.from(value);
+      } else {
+        return value;
+      }
+    });
+
+    const encodedParameters = hre.ethers.utils.defaultAbiCoder.encode(
+      args.types,
+      valuesArray
+    );
+
+    const tx = await dustTokens.TestGatewayDepositAndCall(
+      receiver.address,
+      encodedParameters,
+      {
+        value: depositAmount,
+      }
+    );
+    await tx.wait();
+
+    expect(tx).not.reverted;
+
+    // Check if the contract balance has increased
   });
 });
