@@ -31,7 +31,25 @@ import { evmAddresses, zetaAddresses } from "@/zetachain";
 import { Button } from "@/components/ui/button";
 import ArcherDemo from "@/components/ArcherDemo";
 
+const universalAppAddress = "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E";
 const hardhatAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const localhostProvider = new ethers.providers.JsonRpcProvider(
+  "http://localhost:8545"
+);
+
+// Provide your private key (keep it secure!)
+const PRIVATE_KEY =
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+
+// Create a wallet with the private key connected to the provider
+export const signer = new ethers.Wallet(PRIVATE_KEY, localhostProvider);
+
+// // Get the MetaMask provider
+// const provider = new ethers.providers.Web3Provider(window.ethereum);
+
+// // Request MetaMask to connect and get the signer (current connected account)
+// await provider.send("eth_requestAccounts", []); // Request connection
+// const signer = provider.getSigner(); // Get the signer from MetaMask
 
 const erc20Abi = [
   {
@@ -91,13 +109,6 @@ const Page = () => {
     revertOptions: revertOptions;
     txOptions: txOptions;
   }) {
-    // Get the MetaMask provider
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-
-    // Request MetaMask to connect and get the signer (current connected account)
-    await provider.send("eth_requestAccounts", []); // Request connection
-    const signer = provider.getSigner(); // Get the signer from MetaMask
-
     const { utils } = ethers;
     const gateway = new ethers.Contract(args.gatewayEvm, gatewayAbi, signer);
 
@@ -160,13 +171,6 @@ const Page = () => {
     types: string[];
     values: any[];
   }) {
-    // Get MetaMask provider
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-
-    // Request MetaMask account access and get signer
-    await provider.send("eth_requestAccounts", []);
-    const signer = provider.getSigner();
-
     const { utils } = ethers;
     const gateway = new ethers.Contract(args.gatewayEvm, gatewayAbi, signer);
 
@@ -295,10 +299,8 @@ const Page = () => {
       revertMessage: "0x",
     };
 
-    const universalAppAddress = "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E";
-
     evmDepositAndCall({
-      amount: "100",
+      amount: "10",
       erc20: null,
       gatewayEvm: evmAddresses.gateway,
       receiver: universalAppAddress,
@@ -329,14 +331,6 @@ const Page = () => {
             <h1 className="text-3xl font-bold mt-6">Signer</h1>
             <Erc20Balance account={hardhatAccount} />
             <Erc20Balance
-              contractAddress={evmAddresses.weth}
-              account={hardhatAccount}
-            />
-            <Erc20Balance
-              contractAddress={evmAddresses.dai}
-              account={hardhatAccount}
-            />
-            <Erc20Balance
               contractAddress={evmAddresses.usdc}
               account={hardhatAccount}
             />
@@ -349,10 +343,10 @@ const Page = () => {
             />
             <div className="mt-2">
               <Button size="sm" className="mr-2" onClick={handleDepositETH}>
-                Deposit ETH
+                Deposit 1 ETH
               </Button>
               <Button size="sm" onClick={handleDepositUSDC}>
-                Deposit USDC
+                Deposit 1 USDC
               </Button>
             </div>
 
@@ -392,6 +386,18 @@ const Page = () => {
               account={zetaAddresses.gateway}
             />
 
+            <h1 className="text-3xl font-bold mt-6">My Universal App</h1>
+            <Erc20Balance account={universalAppAddress} />
+            <Erc20Balance
+              contractAddress={evmAddresses.usdc}
+              account={universalAppAddress}
+            />
+            <div className="mt-2">
+              <Button size="sm" className="mr-2" onClick={handleSwapFromEth}>
+                Swap 10 ETH to USDC
+              </Button>
+            </div>
+
             <h1 className="text-3xl font-bold mt-6">Fungible Module</h1>
             <Erc20Balance
               contractAddress={zetaAddresses.usdc}
@@ -413,16 +419,6 @@ const Page = () => {
             />
           </div>
         </div>
-      </div>
-      <div className="flex flex-col items-center">
-        <h1 className="text-4xl font-bold mt-6">Actions</h1>
-        <button
-          onClick={handleSwapFromEth}
-          className="p-2 mt-6 border-2 rounded-md"
-        >
-          Swap ETH to USDC
-          <p className="text-xs">Deposit and Call</p>
-        </button>
       </div>
       <DustTokensActions />
       <ForkCheck />
@@ -447,7 +443,9 @@ function Erc20Balance({
     async function fetchNativeBalance() {
       try {
         setIsNativeBalanceLoading(true);
-        const provider = new ethers.providers.Web3Provider(window.ethereum); // Use MetaMask provider or a specified one
+
+        // Create a JSON rpc provider pointing to localhost
+        const provider = localhostProvider; // Use MetaMask provider or a specified one
         const balance = await provider.getBalance(account); // Fetch the balance
         const formattedBalance = formatUnits(balance, 18); // Format to readable Ether/MATIC/etc.
         setNativeBalance(Number(formattedBalance).toFixed(2)); // Limit to 2 decimal places
@@ -475,7 +473,6 @@ function Erc20Balance({
     abi: erc20Abi,
     functionName: "balanceOf",
     args: [account], // Passing the user's wallet address
-    enabled: !!contractAddress, // Only fetch token balance if contract address is provided
   });
 
   // Fetch token decimals using viem
@@ -483,7 +480,6 @@ function Erc20Balance({
     address: contractAddress,
     abi: erc20Abi,
     functionName: "decimals",
-    enabled: !!contractAddress, // Only fetch decimals if contract address is provided
   });
 
   // Fetch ERC20 name
@@ -491,7 +487,6 @@ function Erc20Balance({
     address: contractAddress,
     abi: erc20Abi,
     functionName: "name",
-    enabled: !!contractAddress, // Only fetch name if contract address is provided
   });
 
   if (contractAddress) {

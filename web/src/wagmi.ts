@@ -18,7 +18,7 @@ export const config = getDefaultConfig({
     sepolia,
     bscTestnet,
     zetachainAthensTestnet,
-    // hardhat,
+    hardhat,
     customLocalHost,
   ],
 });
