@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import { erc20Abi, formatUnits, parseEther } from "viem"; // Using viem for formatting
 import EvmDustTokens from "../../../contracts/artifacts/contracts/EvmDustTokens.sol/EvmDustTokens.json";
 import { evmAddresses, zetaAddresses } from "@/zetachain";
+import { signer } from "@/app/page";
 
 const evmDustTokenAddress = "0xC1dC7a8379885676a6Ea08E67b7Defd9a235De71";
 
@@ -19,13 +20,6 @@ export default function DustTokensActions() {
         gasPrice: ethers.BigNumber.from("1000000000"),
       },
     };
-
-    // Get the MetaMask provider
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-
-    // Request MetaMask to connect and get the signer (current connected account)
-    await provider.send("eth_requestAccounts", []); // Request connection
-    const signer = provider.getSigner(); // Get the signer from MetaMask
 
     const { utils } = ethers;
     const dustTokens = new ethers.Contract(
@@ -74,13 +68,6 @@ export default function DustTokensActions() {
       },
     };
 
-    // Get the MetaMask provider
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-
-    // Request MetaMask to connect and get the signer (current connected account)
-    await provider.send("eth_requestAccounts", []); // Request connection
-    const signer = provider.getSigner(); // Get the signer from MetaMask
-
     const { utils } = ethers;
     const dustTokens = new ethers.Contract(
       evmDustTokenAddress,
@@ -121,13 +108,6 @@ export default function DustTokensActions() {
       types: ["address", "bytes"],
       values: [zetaAddresses.usdc, hardhatAccount],
     };
-
-    // Get MetaMask provider
-    const provider = new ethers.providers.Web3Provider(window.ethereum);
-
-    // Request MetaMask account access and get signer
-    await provider.send("eth_requestAccounts", []);
-    const signer = provider.getSigner();
 
     const { utils } = ethers;
     const dustTokens = new ethers.Contract(
