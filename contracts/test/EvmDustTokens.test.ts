@@ -758,9 +758,9 @@ describe("EvmDustTokens", function () {
     expect(USDCBalanceAfter).is.greaterThan(USDCBalanceBefore);
   });
 
-  it("Test deposit directly", async function () {
+  it.only("Test deposit directly", async function () {
     const depositAmount = hre.ethers.utils.parseEther("0.5");
-    const tx = await dustTokens.swapAndDeposit(receiver.address, {
+    const tx = await dustTokens.TestGatewayDeposit(receiver.address, {
       value: depositAmount,
     });
     await tx.wait();

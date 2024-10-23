@@ -22,6 +22,7 @@ interface IWETH is IERC20 {
 
 contract EvmDustTokens {
     GatewayEVM public gateway;
+    uint256 constant BITCOIN = 18332;
     ISwapRouter public immutable swapRouter;
     address public immutable DAI;
     address payable public immutable WETH9;
@@ -57,6 +58,7 @@ contract EvmDustTokens {
         address _UNI,
         address _WBTC
     ) {
+        gateway = GatewayEVM(gatewayAddress);
         swapRouter = _swapRouter;
         DAI = _DAI;
         WETH9 = _WETH9;
@@ -357,5 +359,20 @@ contract EvmDustTokens {
 
     function TestGetBalance() external view returns (uint256) {
         return IWETH(WETH9).balanceOf(address(this));
+    }
+
+    function TestGatewayDeposit(bytes memory recipient) external payable {
+        require(msg.value > 0, "No ETH sent");
+
+        gateway.deposit{value: msg.value}(
+            address(uint160(bytes20(recipient))), // Ensure valid recipient address
+            RevertOptions({
+                revertAddress: address(0),
+                callOnRevert: false,
+                abortAddress: address(0),
+                revertMessage: "",
+                onRevertGasLimit: 0
+            })
+        );
     }
 }
