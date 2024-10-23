@@ -3,12 +3,19 @@ import { expect } from "chai";
 import { Contract } from "ethers";
 import hre from "hardhat";
 
-import { EvmDustTokens } from "../typechain-types";
+import { EvmDustTokens, Swap } from "../typechain-types";
 
 const DAI_DECIMALS = 18;
 const USDC_DECIMALS = 6;
 
 const GATEWAY_ADDRESS: string = process.env.GATEWAY_ADDRESS ?? "";
+
+// Zetachain Contracts
+const ZETA_GATEWAY_ADDRESS: string = process.env.ZETA_GATEWAY_ADDRESS ?? "";
+const ZETA_SYSTEM_CONTRACT_ADDRESS: string =
+  process.env.ZETA_SYSTEM_CONTRACT_ADDRESS ?? "";
+const ZETA_USDC_ETH_ADDRESS: string = process.env.ZETA_USDC_ETH ?? "";
+const ZETA_ETH_ADDRESS: string = process.env.ZETA_ETH ?? "";
 
 const WETH_ADDRESS: string = process.env.WETH_ADDRESS ?? "";
 const DAI_ADDRESS: string = process.env.DAI_ADDRESS ?? "";
@@ -38,6 +45,8 @@ const ercAbi = [
 describe("EvmDustTokens", function () {
   let signer: SignerWithAddress;
   let receiver: SignerWithAddress;
+
+  // EVM side Contracts
   let dustTokens: EvmDustTokens;
   let WETH: Contract;
   let DAI: Contract;
@@ -46,6 +55,11 @@ describe("EvmDustTokens", function () {
   let UNI: Contract;
   let WBTC: Contract;
   let startBalances: Object;
+
+  // ZetaChain side Contracts
+  let universalApp: Swap;
+  let ZETA_USDC_ETH: Contract;
+  let ZETA_ETH: Contract;
 
   this.beforeAll(async function () {
     // Save Signer
@@ -77,6 +91,23 @@ describe("EvmDustTokens", function () {
     LINK = new hre.ethers.Contract(LINK_ADDRESS, ercAbi, signer);
     UNI = new hre.ethers.Contract(UNI_ADDRESS, ercAbi, signer);
     WBTC = new hre.ethers.Contract(WBTC_ADDRESS, ercAbi, signer);
+
+    // Connect to ZetaChain contracts
+    // Deploy the Universal App contract
+    const universalAppFactory = await hre.ethers.getContractFactory("Swap");
+    universalApp = await universalAppFactory.deploy(
+      ZETA_SYSTEM_CONTRACT_ADDRESS,
+      ZETA_GATEWAY_ADDRESS
+    );
+    await universalApp.deployed();
+
+    // Connect to ERC20s
+    ZETA_USDC_ETH = new hre.ethers.Contract(
+      ZETA_USDC_ETH_ADDRESS,
+      ercAbi,
+      signer
+    );
+    ZETA_ETH = new hre.ethers.Contract(ZETA_ETH_ADDRESS, ercAbi, signer);
   });
 
   this.beforeEach(async function () {
@@ -94,6 +125,8 @@ describe("EvmDustTokens", function () {
       usdc: await USDC.balanceOf(signer.address),
       wbtc: await WBTC.balanceOf(signer.address),
       weth: await WETH.balanceOf(signer.address),
+      zeta_eth: await ZETA_ETH.balanceOf(signer.address),
+      zeta_usdc_eth: await ZETA_USDC_ETH.balanceOf(signer.address),
     };
 
     const formattedBalances = {
@@ -106,6 +139,9 @@ describe("EvmDustTokens", function () {
       usdc: Number(hre.ethers.utils.formatUnits(balances.usdc, USDC_DECIMALS)),
       wbtc: Number(hre.ethers.utils.formatUnits(balances.wbtc, DAI_DECIMALS)),
       weth: Number(hre.ethers.utils.formatUnits(balances.weth, DAI_DECIMALS)),
+      zeta_eth: Number(
+        hre.ethers.utils.formatUnits(balances.zeta_eth, DAI_DECIMALS)
+      ),
     };
 
     console.log(
@@ -760,9 +796,32 @@ describe("EvmDustTokens", function () {
 
   it.only("Test deposit directly", async function () {
     const depositAmount = hre.ethers.utils.parseEther("0.5");
-    const tx = await dustTokens.TestGatewayDeposit(receiver.address, {
+    const tx = await dustTokens.TestGatewayDeposit(signer.address, {
       value: depositAmount,
     });
     await tx.wait();
+    expect(tx).not.reverted;
+
+    // Check if ZETA_ETH balance has increased
+    const expandedZETA_ETHBalanceAfter = await ZETA_ETH.balanceOf(
+      signer.address
+    );
+    const ZETA_ETHBalanceAfter = Number(
+      hre.ethers.utils.formatUnits(expandedZETA_ETHBalanceAfter, DAI_DECIMALS)
+    );
+
+    await setTimeout(() => {
+      console.log("Checking ZETA_ETH balance after 1 second");
+    }, 1000);
+
+    const ZETA_ETHBalanceBefore = startBalances["zeta_eth"];
+    const ZETA_ETHDiff = ZETA_ETHBalanceBefore - ZETA_ETHBalanceAfter;
+    console.log(
+      `ZETA_ETH balance - Before: ${ZETA_ETHBalanceBefore}, After: ${ZETA_ETHBalanceAfter}, Diff: ${ZETA_ETHDiff}`
+    );
+    // Ensure the WETH balance increased after the swap
+    expect(ZETA_ETHBalanceBefore).to.be.greaterThan(ZETA_ETHBalanceAfter);
+  });
+
   });
 });
