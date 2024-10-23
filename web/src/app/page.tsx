@@ -83,6 +83,7 @@ const erc20Abi = [
 ];
 
 const Page = () => {
+  const [loading, setLoading] = useState(false);
   const account = useAccount();
 
   const balance = getBalance(config, {
@@ -321,8 +322,8 @@ const Page = () => {
         <ConnectButton label="Connect EVM" showBalance={true} />
       </div>
       {/* <Welcome /> */}
-      <div className="bg-gray-800 p-8">
-        <ArcherDemo />
+      <div className="bg-gray-900 p-8 mb-36">
+        <ArcherDemo loading={loading} />
       </div>
       <div className="flex justify-center items-center">
         <div className="flex flex-row space-x-6">

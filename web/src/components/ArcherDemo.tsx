@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import Image from "next/image";
-import { Check, ChevronsUpDown, X } from "lucide-react";
+import { Check, ChevronsUpDown, Coins, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ArcherContainer, ArcherElement } from "react-archer";
 import {
@@ -19,12 +19,13 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const containerStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  height: "750px",
+  height: "600px",
   width: "100%",
   margin: "50px 0",
 };
@@ -68,7 +69,7 @@ const networks = [
   { value: "solana", label: "Solana", enabled: false },
 ];
 
-export default function Component() {
+export default function Component({ loading }: { loading: boolean }) {
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<
@@ -151,39 +152,43 @@ export default function Component() {
                   },
                 ]}
               >
-                <div className="bg-white text-black rounded-lg py-2 px-4 mb-4 flex flex-col items-start w-64">
-                  <div className="flex justify-between w-full mb-2">
-                    <span>{token.label}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveToken(token.value)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="flex items-center w-full">
-                    <Input
-                      type="number"
-                      value={token.amount}
-                      onChange={(e) =>
-                        handleAmountChange(token.value, e.target.value)
-                      }
-                      className="w-full mr-2"
-                      placeholder="Amount"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleMaxAmount(token.value)}
-                      className={cn(
-                        token.isMax && "bg-primary text-primary-foreground"
-                      )}
-                    >
-                      Max
-                    </Button>
-                  </div>
-                </div>
+                <Card className="rounded-xl mb-4 items-start w-64">
+                  <CardHeader>
+                    <div className="flex justify-between items-center w-full">
+                      <CardTitle>{token.label}</CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveToken(token.value)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center w-full">
+                      <Input
+                        type="number"
+                        value={token.amount}
+                        onChange={(e) =>
+                          handleAmountChange(token.value, e.target.value)
+                        }
+                        className="w-full mr-2"
+                        placeholder="Amount"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleMaxAmount(token.value)}
+                        className={cn(
+                          token.isMax && "bg-primary text-primary-foreground"
+                        )}
+                      >
+                        Max
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </ArcherElement>
             ))}
             <ArcherElement
@@ -263,11 +268,16 @@ export default function Component() {
               ]}
             >
               <div>
+                {/* <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+                </span> */}
                 <Image
                   src="/assets/zetachain-icon.svg"
                   alt="Zetachain Logo"
                   width={120}
                   height={120}
+                  className={cn(loading && "animate-pulse")}
                 />
                 {/* <h1 className="text-2xl text-center font-bold mt-2">
                   Zetachain
@@ -325,6 +335,16 @@ export default function Component() {
           </div>
         </div>
       </ArcherContainer>
+      <div className="flex items-center justify-center mt-4">
+        <Button
+          size="lg"
+          onClick={() => console.log(selectedTokens, selectedNetwork)}
+          disabled={!selectedTokens.length || !selectedNetwork}
+        >
+          <Coins className="h-4 w-4 mr-2" />
+          Preview Swap
+        </Button>
+      </div>
     </div>
   );
 }
