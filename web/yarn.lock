@@ -2283,6 +2283,13 @@
     aria-hidden "^1.1.1"
     react-remove-scroll "2.5.7"
 
+"@radix-ui/react-separator@^1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@radix-ui/react-separator/-/react-separator-1.1.0.tgz#ee0f4d86003b0e3ea7bc6ccab01ea0adee32663e"
+  integrity sha512-3uBAs+egzvJBDZAzvb/n4NxxOYpnspmWxO2u5NbZ8Y6FM/NdrGSF9bop3Cf6F6C71z1rTSn8KV0Fo2ZVd79lGA==
+  dependencies:
+    "@radix-ui/react-primitive" "2.0.0"
+
 "@radix-ui/react-slot@1.0.2":
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/@radix-ui/react-slot/-/react-slot-1.0.2.tgz#a9ff4423eade67f501ffb32ec22064bc9d3099ab"
@@ -7591,6 +7598,13 @@ varuint-bitcoin@^1.1.2:
   integrity sha512-4EVb+w4rx+YfVM32HQX42AbbT7/1f5zwAYhIujKXKk8NQK+JfRVl3pqT3hjNn/L+RstigmGGKVwHA/P0wgITZw==
   dependencies:
     safe-buffer "^5.1.1"
+
+vaul@^1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/vaul/-/vaul-1.1.0.tgz#7da4bc965e0b184ada632f1208096b0f5575d920"
+  integrity sha512-YhO/bikcauk48hzhMhvIvT+U87cuCbNbKk9fF4Ou5UkI9t2KkBMernmdP37pCzF15hrv55fcny1YhexK8h6GVQ==
+  dependencies:
+    "@radix-ui/react-dialog" "^1.1.1"
 
 viem@2.9.31:
   version "2.9.31"

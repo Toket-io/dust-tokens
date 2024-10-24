@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 
 const containerStyle = {
   display: "flex",
@@ -63,13 +64,14 @@ const tokens = [
 ];
 
 const networks = [
-  { value: "ethereum", label: "Ethereum", enabled: true },
+  { value: "ethereum", label: "Ethereum (ETH)", enabled: true },
   { value: "binance", label: "Binance Smart Chain", enabled: false },
   { value: "polygon", label: "Polygon", enabled: false },
   { value: "solana", label: "Solana", enabled: false },
 ];
 
-export default function Component({ loading }: { loading: boolean }) {
+export default function Component() {
+  const [loading, setLoading] = useState(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<
@@ -85,6 +87,12 @@ export default function Component({ loading }: { loading: boolean }) {
     value: string;
     label: string;
   } | null>(null);
+
+  const handleSwapConfirm = async () => {
+    setLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    setLoading(false);
+  };
 
   const handleSelectToken = (token: {
     value: string;
@@ -268,17 +276,20 @@ export default function Component({ loading }: { loading: boolean }) {
               ]}
             >
               <div>
-                {/* <span class="relative flex h-3 w-3">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
-                </span> */}
-                <Image
-                  src="/assets/zetachain-icon.svg"
-                  alt="Zetachain Logo"
-                  width={120}
-                  height={120}
-                  className={cn(loading && "animate-pulse")}
-                />
+                <span className="relative flex h-32	w-32">
+                  <span
+                    className={`${
+                      loading ? "animate-ping" : ""
+                    } absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75`}
+                  ></span>
+                  <Image
+                    src="/assets/zetachain-icon.svg"
+                    alt="Zetachain Logo"
+                    width={120}
+                    height={120}
+                    className="relative inline-flex rounded-full h-32 w-32"
+                  />
+                </span>
                 {/* <h1 className="text-2xl text-center font-bold mt-2">
                   Zetachain
                 </h1> */}
@@ -336,14 +347,19 @@ export default function Component({ loading }: { loading: boolean }) {
         </div>
       </ArcherContainer>
       <div className="flex items-center justify-center mt-4">
-        <Button
+        <SwapPreviewDrawer
+          selectedTokens={selectedTokens}
+          selectedNetwork={selectedNetwork}
+          onConfirm={handleSwapConfirm}
+        />
+        {/* <Button
           size="lg"
           onClick={() => console.log(selectedTokens, selectedNetwork)}
           disabled={!selectedTokens.length || !selectedNetwork}
         >
           <Coins className="h-4 w-4 mr-2" />
           Preview Swap
-        </Button>
+        </Button> */}
       </div>
     </div>
   );
