@@ -160,7 +160,7 @@ export default function Component() {
                   },
                 ]}
               >
-                <Card className="rounded-xl mb-4 items-start w-64">
+                <Card className="rounded-2xl mb-4 items-start w-64">
                   <CardHeader>
                     <div className="flex justify-between items-center w-full">
                       <CardTitle>{token.label}</CardTitle>
