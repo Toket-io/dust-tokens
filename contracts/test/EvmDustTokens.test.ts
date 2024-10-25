@@ -1,9 +1,9 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
-import { Contract } from "ethers";
+import { BigNumber, Contract } from "ethers";
 import hre from "hardhat";
 
-import { EvmDustTokens, Swap } from "../typechain-types";
+import { EvmDustTokens, SimpleSwap, Swap } from "../typechain-types";
 
 const DAI_DECIMALS = 18;
 const USDC_DECIMALS = 6;
@@ -47,6 +47,7 @@ describe("EvmDustTokens", function () {
   let receiver: SignerWithAddress;
 
   // EVM side Contracts
+  let simpleSwap: SimpleSwap;
   let dustTokens: EvmDustTokens;
   let WETH: Contract;
   let DAI: Contract;
@@ -68,6 +69,11 @@ describe("EvmDustTokens", function () {
 
     receiver = signers[1];
 
+    // Deploy the SimpleSwap contract
+    const simpleSwapFactory = await hre.ethers.getContractFactory("SimpleSwap");
+    simpleSwap = await simpleSwapFactory.deploy(UNISWAP_ROUTER, WETH_ADDRESS);
+    await simpleSwap.deployed();
+
     // Deploy the DustTokens contract
     const evmDustTokensFactory = await hre.ethers.getContractFactory(
       "EvmDustTokens"
@@ -75,12 +81,7 @@ describe("EvmDustTokens", function () {
     dustTokens = await evmDustTokensFactory.deploy(
       GATEWAY_ADDRESS,
       UNISWAP_ROUTER,
-      DAI_ADDRESS,
-      WETH_ADDRESS,
-      USDC_ADDRESS,
-      LINK_ADDRESS,
-      UNI_ADDRESS,
-      WBTC_ADDRESS
+      WETH_ADDRESS
     );
     await dustTokens.deployed();
 
@@ -111,12 +112,33 @@ describe("EvmDustTokens", function () {
   });
 
   this.beforeEach(async function () {
+    const WETHAmount = hre.ethers.utils.parseEther("10");
     // Fund signer with some WETH
     const depositWETH = await WETH.deposit({
-      value: hre.ethers.utils.parseEther("10"),
+      value: WETHAmount,
     });
     await depositWETH.wait();
 
+    // Approve the SimpleSwap contract to spend WETH
+    const approveWETH = await WETH.approve(simpleSwap.address, WETHAmount);
+    await approveWETH.wait();
+
+    // Fund signer with ERC20 tokens
+    const erc20s = [
+      DAI_ADDRESS,
+      USDC_ADDRESS,
+      LINK_ADDRESS,
+      UNI_ADDRESS,
+      WBTC_ADDRESS,
+    ];
+    const swapAmount = hre.ethers.utils.parseEther("1");
+    const simpleSwapTx = await simpleSwap.ExecuteMultiSwapFromWETH(
+      erc20s,
+      swapAmount
+    );
+    await simpleSwapTx.wait();
+
+    // Check balances
     const balances = {
       dai: await DAI.balanceOf(signer.address),
       link: await LINK.balanceOf(signer.address),
@@ -154,198 +176,6 @@ describe("EvmDustTokens", function () {
     );
 
     startBalances = formattedBalances;
-  });
-
-  it("Should withdraw WETH", async function () {
-    // Withdraw some WETH
-    const swapAmount = "1";
-    const amount = hre.ethers.utils.parseEther(swapAmount);
-    const withdrawWETH = await WETH.withdraw(amount);
-    await withdrawWETH.wait();
-
-    // Check native ETH balance
-    const expandedNativeEthBalanceAfter = await signer.getBalance();
-    const nativeEthBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedNativeEthBalanceAfter, DAI_DECIMALS)
-    );
-
-    const nativeEthBalanceBefore = startBalances["nativeEth"];
-    const diff = nativeEthBalanceBefore - nativeEthBalanceAfter;
-
-    console.log(
-      `Native ETH balance - Before: ${nativeEthBalanceBefore}, After: ${nativeEthBalanceAfter}, Diff: ${diff}`
-    );
-
-    expect(nativeEthBalanceAfter).is.greaterThan(nativeEthBalanceBefore);
-
-    // Check WETH balance
-    const expandedWETHBalanceAfter = await WETH.balanceOf(signer.address);
-    const WETHBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedWETHBalanceAfter, DAI_DECIMALS)
-    );
-    const WETHBalanceBefore = startBalances["weth"];
-    const WETHDiff = WETHBalanceBefore - WETHBalanceAfter;
-    console.log(
-      `WETH balance - Before: ${WETHBalanceBefore}, After: ${WETHBalanceAfter}, Diff: ${WETHDiff}`
-    );
-    // Ensure the WETH balance increased after the swap
-    expect(WETHBalanceBefore).to.be.greaterThan(WETHBalanceAfter);
-
-    // Ensure the difference matches the swap amount
-    expect(WETHDiff).to.equal(Number(swapAmount));
-  });
-
-  it("Should swap WETH for DAI", async function () {
-    const swapAmount = "0.1";
-    const amountIn = hre.ethers.utils.parseEther(swapAmount);
-
-    /* Approve WETH */
-    const approveTx = await WETH.approve(dustTokens.address, amountIn);
-    await approveTx.wait();
-    console.log("WETH approved for SimpleSwap");
-
-    /* Execute the swap */
-    console.log("Swapping WETH for DAI:", swapAmount);
-    const swapTx = await dustTokens.swapWETHForDAI(amountIn, {
-      gasLimit: 300000,
-    });
-
-    await swapTx.wait();
-    console.log("Swap executed");
-
-    expect(swapTx).not.reverted;
-
-    /* Check DAI end balance */
-    const expandedDAIBalanceAfter = await DAI.balanceOf(signer.address);
-    const DAIBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedDAIBalanceAfter, DAI_DECIMALS)
-    );
-    console.log("DAI balance after swap:", DAIBalanceAfter);
-
-    expect(DAIBalanceAfter).is.greaterThan(startBalances["dai"]);
-  });
-
-  it("Should swap WETH for USDC", async function () {
-    const swapAmount = "0.1";
-    const amountIn = hre.ethers.utils.parseEther(swapAmount);
-
-    /* Approve WETH */
-    const approveTx = await WETH.approve(dustTokens.address, amountIn);
-    await approveTx.wait();
-    console.log("WETH approved for SimpleSwap");
-
-    /* Execute the swap */
-    console.log("Swapping WETH for USDC:", swapAmount);
-    const swapTx = await dustTokens.swapWETHForUSDC(amountIn, {
-      gasLimit: 300000,
-    });
-
-    await swapTx.wait();
-    console.log("Swap executed");
-
-    expect(swapTx).not.reverted;
-
-    /* Check USDC end balance */
-    const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
-    const USDCBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
-    );
-    console.log("USDC balance after swap:", USDCBalanceAfter);
-
-    expect(USDCBalanceAfter).is.greaterThan(startBalances["usdc"]);
-  });
-
-  it("Should swap WETH for LINK", async function () {
-    const swapAmount = "0.1";
-    const amountIn = hre.ethers.utils.parseEther(swapAmount);
-
-    /* Approve WETH */
-    const approveTx = await WETH.approve(dustTokens.address, amountIn);
-    await approveTx.wait();
-    console.log("WETH approved for SimpleSwap");
-
-    /* Execute the swap */
-    console.log("Swapping WETH for LINK:", swapAmount);
-    const swapTx = await dustTokens.swapWETHForLINK(amountIn, {
-      gasLimit: 300000,
-    });
-
-    await swapTx.wait();
-    console.log("Swap executed");
-
-    expect(swapTx).not.reverted;
-
-    /* Check LINK end balance */
-    const expandedLINKBalanceAfter = await LINK.balanceOf(signer.address);
-    const LINKBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedLINKBalanceAfter, DAI_DECIMALS)
-    );
-    console.log("LINK balance after swap:", LINKBalanceAfter);
-
-    expect(LINKBalanceAfter).is.greaterThan(startBalances["link"]);
-  });
-
-  it("Should swap WETH for UNI", async function () {
-    const swapAmount = "0.1";
-    const amountIn = hre.ethers.utils.parseEther(swapAmount);
-
-    /* Approve WETH */
-    const approveTx = await WETH.approve(dustTokens.address, amountIn);
-    await approveTx.wait();
-    console.log("WETH approved for SimpleSwap");
-
-    /* Execute the swap */
-    console.log("Swapping WETH for UNI:", swapAmount);
-    const swapTx = await dustTokens.swapWETHForUNI(amountIn, {
-      gasLimit: 300000,
-    });
-
-    await swapTx.wait();
-    console.log("Swap executed");
-
-    expect(swapTx).not.reverted;
-
-    /* Check UNI end balance */
-    const expandedUNIBalanceAfter = await UNI.balanceOf(signer.address);
-    const UNIBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedUNIBalanceAfter, DAI_DECIMALS)
-    );
-    console.log("UNI balance after swap:", UNIBalanceAfter);
-
-    expect(UNIBalanceAfter).is.greaterThan(startBalances["uni"]);
-  });
-
-  it("Should swap WETH for WBTC", async function () {
-    const swapAmount = "1";
-    const amountIn = hre.ethers.utils.parseEther(swapAmount);
-
-    /* Approve WETH */
-    const currentBalance = await WETH.balanceOf(signer.address);
-    console.log(
-      "Current WETH balance:",
-      hre.ethers.utils.formatUnits(currentBalance, DAI_DECIMALS)
-    );
-    const approveTx = await WETH.approve(dustTokens.address, amountIn);
-    await approveTx.wait();
-    console.log("WETH approved for SimpleSwap");
-
-    /* Execute the swap */
-    console.log("Swapping WETH for WBTC:", swapAmount);
-    const swapTx = await dustTokens.swapWETHForWBTC(amountIn);
-
-    await swapTx.wait();
-    console.log("Swap executed");
-
-    expect(swapTx).not.reverted;
-
-    /* Check WBTC end balance */
-    const expandedWBTCBalanceAfter = await WBTC.balanceOf(signer.address);
-    const WBTCBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedWBTCBalanceAfter, DAI_DECIMALS)
-    );
-    console.log("WBTC balance after swap:", WBTCBalanceAfter);
-
-    expect(WBTCBalanceAfter).is.greaterThan(startBalances["wbtc"]);
   });
 
   it("Should swap all tokens for WETH", async function () {
@@ -797,7 +627,7 @@ describe("EvmDustTokens", function () {
     expect(USDCBalanceAfter).is.greaterThan(USDCBalanceBefore);
   });
 
-  it.only("Test deposit directly", async function () {
+  it("Test deposit directly", async function () {
     const depositAmount = hre.ethers.utils.parseEther("0.5");
     const tx = await dustTokens.TestGatewayDeposit(signer.address, {
       value: depositAmount,
@@ -829,7 +659,7 @@ describe("EvmDustTokens", function () {
     );
   });
 
-  it.only("Test deposit and call directly", async function () {
+  it("Test deposit and call directly", async function () {
     const depositAmount = hre.ethers.utils.parseEther("0.5");
 
     const args = {
@@ -913,5 +743,145 @@ describe("EvmDustTokens", function () {
     );
 
     expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
+  });
+
+  it("SwapAndBridgeTokens", async function () {
+    const args = {
+      amount: "10",
+      erc20: null,
+      gatewayEvm: GATEWAY_ADDRESS,
+      receiver: universalApp.address,
+      revertOptions: {
+        callOnRevert: false,
+        onRevertGasLimit: 7000000,
+        revertAddress: "0x0000000000000000000000000000000000000000",
+        revertMessage: "0x",
+      },
+      txOptions: {
+        gasLimit: 1000000,
+        gasPrice: {
+          hex: "0x3b9aca00",
+          type: "BigNumber",
+        },
+      },
+      types: ["address", "bytes"],
+      values: [ZETA_USDC_ETH_ADDRESS, signer.address],
+    };
+
+    const revertOptions = {
+      abortAddress: "0x0000000000000000000000000000000000000000", // not used
+      callOnRevert: args.revertOptions.callOnRevert,
+      onRevertGasLimit: args.revertOptions.onRevertGasLimit,
+      revertAddress: args.revertOptions.revertAddress,
+      revertMessage: hre.ethers.utils.hexlify(
+        hre.ethers.utils.toUtf8Bytes(args.revertOptions.revertMessage)
+      ),
+    };
+
+    // Prepare encoded parameters for the call
+    const valuesArray = args.values.map((value, index) => {
+      const type = args.types[index];
+      if (type === "bool") {
+        try {
+          return JSON.parse(value.toLowerCase());
+        } catch (e) {
+          throw new Error(`Invalid boolean value: ${value}`);
+        }
+      } else if (type.startsWith("uint") || type.startsWith("int")) {
+        return hre.ethers.BigNumber.from(value);
+      } else {
+        return value;
+      }
+    });
+
+    const encodedParameters = hre.ethers.utils.defaultAbiCoder.encode(
+      args.types,
+      valuesArray
+    );
+
+    // Tokens lists
+    // ERC-20 Contracts to be swapped, with their names
+    const ercContracts = [
+      { amount: "100", contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
+      { amount: "1", contract: LINK, decimals: DAI_DECIMALS, name: "LINK" }, // Assuming LINK uses the same decimals as DAI
+      { amount: "6", contract: UNI, decimals: DAI_DECIMALS, name: "UNI" }, // Assuming LINK uses the same decimals as DAI
+      //   { contract: WBTC, decimals: DAI_DECIMALS, name: "WBTC" }, // Assuming LINK uses the same decimals as DAI
+    ];
+
+    // Approve the MultiSwap contract to spend tokens
+    for (const { amount, name, contract, decimals } of ercContracts) {
+      const formattedAmount = hre.ethers.utils.parseUnits(amount, decimals);
+
+      const approveTx = await contract.approve(
+        dustTokens.address,
+        formattedAmount
+      );
+      await approveTx.wait();
+
+      console.log(`${name} approved for MultiSwap`);
+    }
+
+    // Check Initial Balances
+    const beforeBalances = {};
+    for (const { name, contract, decimals } of ercContracts) {
+      const balance = await contract.balanceOf(signer.address);
+      beforeBalances[name] = Number(
+        hre.ethers.utils.formatUnits(balance, decimals)
+      );
+    }
+
+    // Execute the swap
+    type TokenSwap = {
+      amount: BigNumber;
+      token: string;
+    };
+    const tokenSwaps: TokenSwap[] = ercContracts.map(
+      ({ amount, decimals, contract }) => {
+        const formattedAmount = hre.ethers.utils.parseUnits(amount, decimals);
+        const token: TokenSwap = {
+          amount: formattedAmount,
+          token: contract.address,
+        };
+        return token;
+      }
+    );
+
+    // console.log("Token Swaps:", tokenSwaps);
+
+    const tx = await dustTokens.SwapAndBridgeTokens(
+      tokenSwaps,
+      universalApp.address,
+      encodedParameters,
+      revertOptions
+    );
+    const receipt = await tx.wait();
+
+    // Check that the receipt includes the event SwappedAndDeposited
+    const event = receipt.events?.find(
+      (e) => e.event === "SwappedAndDeposited"
+    );
+
+    expect(tx).not.reverted;
+    expect(event).exist;
+
+    const totalTokensDeposited = hre.ethers.utils.formatEther(event?.args[2]);
+    console.log("Swap Event: ", totalTokensDeposited);
+
+    // // Wait for 1 second
+    // await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // // Check if USDC balance has increased
+    // const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
+    // const UsdcBalanceAfter = Number(
+    //   hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
+    // );
+    // const UsdcBalanceBefore = startBalances["usdc"];
+    // const UsdcDiff = UsdcBalanceAfter - UsdcBalanceBefore;
+
+    // console.log(
+    //   `USDC balance - Before: ${UsdcBalanceBefore}, After: ${UsdcBalanceAfter}, Diff: ${UsdcDiff}`
+    // );
+
+    // expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
   });
 });
