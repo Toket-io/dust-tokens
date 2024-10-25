@@ -1,6 +1,6 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
-import { Contract } from "ethers";
+import { BigNumber, Contract } from "ethers";
 import hre from "hardhat";
 
 import { EvmDustTokens, Swap } from "../typechain-types";
@@ -797,7 +797,7 @@ describe("EvmDustTokens", function () {
     expect(USDCBalanceAfter).is.greaterThan(USDCBalanceBefore);
   });
 
-  it.only("Test deposit directly", async function () {
+  it("Test deposit directly", async function () {
     const depositAmount = hre.ethers.utils.parseEther("0.5");
     const tx = await dustTokens.TestGatewayDeposit(signer.address, {
       value: depositAmount,
@@ -829,7 +829,7 @@ describe("EvmDustTokens", function () {
     );
   });
 
-  it.only("Test deposit and call directly", async function () {
+  it("Test deposit and call directly", async function () {
     const depositAmount = hre.ethers.utils.parseEther("0.5");
 
     const args = {
@@ -913,5 +913,126 @@ describe("EvmDustTokens", function () {
     );
 
     expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
+  });
+
+  it.only("SwapAndBridgeTokens", async function () {
+    const args = {
+      amount: "10",
+      erc20: null,
+      gatewayEvm: GATEWAY_ADDRESS,
+      receiver: universalApp.address,
+      revertOptions: {
+        callOnRevert: false,
+        onRevertGasLimit: 7000000,
+        revertAddress: "0x0000000000000000000000000000000000000000",
+        revertMessage: "0x",
+      },
+      txOptions: {
+        gasLimit: 1000000,
+        gasPrice: {
+          hex: "0x3b9aca00",
+          type: "BigNumber",
+        },
+      },
+      types: ["address", "bytes"],
+      values: [ZETA_USDC_ETH_ADDRESS, signer.address],
+    };
+
+    const revertOptions = {
+      abortAddress: "0x0000000000000000000000000000000000000000", // not used
+      callOnRevert: args.revertOptions.callOnRevert,
+      onRevertGasLimit: args.revertOptions.onRevertGasLimit,
+      revertAddress: args.revertOptions.revertAddress,
+      revertMessage: hre.ethers.utils.hexlify(
+        hre.ethers.utils.toUtf8Bytes(args.revertOptions.revertMessage)
+      ),
+    };
+
+    // Prepare encoded parameters for the call
+    const valuesArray = args.values.map((value, index) => {
+      const type = args.types[index];
+      if (type === "bool") {
+        try {
+          return JSON.parse(value.toLowerCase());
+        } catch (e) {
+          throw new Error(`Invalid boolean value: ${value}`);
+        }
+      } else if (type.startsWith("uint") || type.startsWith("int")) {
+        return hre.ethers.BigNumber.from(value);
+      } else {
+        return value;
+      }
+    });
+
+    const encodedParameters = hre.ethers.utils.defaultAbiCoder.encode(
+      args.types,
+      valuesArray
+    );
+
+    // Tokens lists
+    // ERC-20 Contracts to be swapped, with their names
+    const ercContracts = [
+      { amount: "1.1", contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
+      { amount: "1.2", contract: USDC, decimals: USDC_DECIMALS, name: "USDC" },
+      { amount: "1.3", contract: LINK, decimals: DAI_DECIMALS, name: "LINK" }, // Assuming LINK uses the same decimals as DAI
+      { amount: "1.4", contract: UNI, decimals: DAI_DECIMALS, name: "UNI" }, // Assuming LINK uses the same decimals as DAI
+      //   { contract: WBTC, decimals: DAI_DECIMALS, name: "WBTC" }, // Assuming LINK uses the same decimals as DAI
+    ];
+
+    // Approve the MultiSwap contract to spend tokens
+    for (const { amount, name, contract, decimals } of ercContracts) {
+      const formattedAmount = hre.ethers.utils.parseUnits(amount, decimals);
+
+      const approveTx = await contract.approve(
+        dustTokens.address,
+        formattedAmount
+      );
+      await approveTx.wait();
+
+      console.log(`${name} approved for MultiSwap`);
+    }
+
+    // Check Initial Balances
+    const beforeBalances = {};
+    for (const { name, contract, decimals } of ercContracts) {
+      const balance = await contract.balanceOf(signer.address);
+      beforeBalances[name] = Number(
+        hre.ethers.utils.formatUnits(balance, decimals)
+      );
+      // beforeBalances[`${name}-original`] = balance;
+      // beforeBalances[`${name}-formatted`] = Number(
+      //   hre.ethers.utils.parseUnits(`${beforeBalances[name]}`, decimals)
+      // );
+    }
+
+    // console.log("Before Balances:", beforeBalances);
+
+    // Execute the swap
+    type TokenSwap = {
+      amount: BigNumber;
+      token: string;
+    };
+    const tokenSwaps: TokenSwap[] = ercContracts.map(
+      ({ amount, decimals, contract }) => {
+        const formattedAmount = hre.ethers.utils.parseUnits(amount, decimals);
+        const token: TokenSwap = {
+          amount: formattedAmount,
+          token: contract.address,
+        };
+        return token;
+      }
+    );
+
+    // console.log("Token Swaps:", tokenSwaps);
+
+    const tx = await dustTokens.SwapAndBridgeTokens(
+      tokenSwaps,
+      universalApp.address,
+      encodedParameters,
+      revertOptions
+    );
+    await tx.wait();
+
+    expect(tx).not.reverted;
   });
 });

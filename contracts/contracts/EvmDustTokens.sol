@@ -20,6 +20,11 @@ interface IWETH is IERC20 {
     function withdrawTo(address account, uint256 amount) external;
 }
 
+struct TokenSwap {
+    address token;
+    uint256 amount;
+}
+
 contract EvmDustTokens {
     GatewayEVM public gateway;
     uint256 constant BITCOIN = 18332;
@@ -67,6 +72,8 @@ contract EvmDustTokens {
         UNI = _UNI;
         WBTC = _WBTC;
     }
+
+    receive() external payable {}
 
     function swapWETHForDAI(
         uint amountIn
@@ -388,5 +395,72 @@ contract EvmDustTokens {
             payload,
             revertOptions
         );
+    }
+
+    function SwapAndBridgeTokens(
+        TokenSwap[] memory swaps,
+        address universalApp,
+        bytes calldata payload,
+        RevertOptions calldata revertOptions
+    ) external {
+        uint256 totalTokensReceived = 0;
+        address outputToken = WETH9;
+
+        require(swaps.length > 0, "No swaps provided");
+
+        // Loop through each ERC-20 token address provided
+        for (uint256 i = 0; i < swaps.length; i++) {
+            TokenSwap memory swap = swaps[i];
+            address token = swap.token;
+            // uint256 amount = swap.amount;
+
+            // Check allowance and balance
+            uint256 allowance = IERC20(token).allowance(
+                msg.sender,
+                address(this)
+            );
+            require(allowance > 0, "Insufficient allowance for token");
+
+            uint256 balance = IERC20(token).balanceOf(msg.sender);
+            require(balance >= allowance, "Insufficient token balance");
+
+            // Transfer token from user to this contract
+            TransferHelper.safeTransferFrom(
+                token,
+                msg.sender,
+                address(this),
+                allowance
+            );
+
+            // Approve the swap router to spend the token
+            TransferHelper.safeApprove(token, address(swapRouter), allowance);
+
+            // Build Uniswap Swap to convert the token to WETH
+            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+                .ExactInputSingleParams({
+                    tokenIn: token,
+                    tokenOut: outputToken,
+                    fee: 3000, // TODO: Adjust for fee tier
+                    recipient: address(this), // Swap to this contract
+                    deadline: block.timestamp,
+                    amountIn: allowance,
+                    amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
+                    sqrtPriceLimitX96: 0
+                });
+
+            // Perform the swap
+            uint256 amountOut = swapRouter.exactInputSingle(params);
+            totalTokensReceived += amountOut;
+        }
+
+        IWETH(WETH9).withdraw(totalTokensReceived);
+
+        gateway.depositAndCall{value: totalTokensReceived}(
+            universalApp,
+            payload,
+            revertOptions
+        );
+
+        // return totalTokensReceived;
     }
 }
