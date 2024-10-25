@@ -27,9 +27,9 @@ import { useEffect, useState } from "react";
 import DustTokensActions from "../components/DustTokensActions";
 import ForkCheck from "../components/ForkCheck";
 import TokenSwapSelector from "@/components/TokenSwapSelector";
-import { evmAddresses, zetaAddresses } from "@/zetachain";
 import { Button } from "@/components/ui/button";
 import ArcherDemo from "@/components/ArcherDemo";
+import ContractsConfig from "../../../ContractsConfig";
 
 const universalAppAddress = "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E";
 const hardhatAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
@@ -261,7 +261,7 @@ const Page = () => {
     evmDeposit({
       amount: "1",
       erc20: null,
-      gatewayEvm: evmAddresses.gateway,
+      gatewayEvm: ContractsConfig.evm_gateway,
       receiver: hardhatAccount,
       revertOptions: revertOptions,
       txOptions: {
@@ -281,8 +281,8 @@ const Page = () => {
 
     evmDeposit({
       amount: "1",
-      erc20: evmAddresses.usdc,
-      gatewayEvm: evmAddresses.gateway,
+      erc20: ContractsConfig.evm_usdcToken,
+      gatewayEvm: ContractsConfig.evm_gateway,
       receiver: hardhatAccount,
       revertOptions: revertOptions,
       txOptions: {
@@ -303,7 +303,7 @@ const Page = () => {
     evmDepositAndCall({
       amount: "10",
       erc20: null,
-      gatewayEvm: evmAddresses.gateway,
+      gatewayEvm: ContractsConfig.evm_gateway,
       receiver: universalAppAddress,
       revertOptions: revertOptions,
       txOptions: {
@@ -311,7 +311,7 @@ const Page = () => {
         gasPrice: ethers.BigNumber.from("1000000000"),
       },
       types: ["address", "bytes"],
-      values: [zetaAddresses.usdc, hardhatAccount],
+      values: [ContractsConfig.zeta_usdcEthToken, hardhatAccount],
     });
   };
 
@@ -332,15 +332,15 @@ const Page = () => {
             <h1 className="text-3xl font-bold mt-6">Signer</h1>
             <Erc20Balance account={hardhatAccount} />
             <Erc20Balance
-              contractAddress={evmAddresses.usdc}
+              contractAddress={ContractsConfig.evm_usdcToken}
               account={hardhatAccount}
             />
 
             <h1 className="text-3xl font-bold mt-6">Gateway</h1>
-            <Erc20Balance account={evmAddresses.gateway} />
+            <Erc20Balance account={ContractsConfig.evm_gateway} />
             <Erc20Balance
-              contractAddress={evmAddresses.usdc}
-              account={evmAddresses.gateway}
+              contractAddress={ContractsConfig.evm_usdcToken}
+              account={ContractsConfig.evm_gateway}
             />
             <div className="mt-2">
               <Button size="sm" className="mr-2" onClick={handleDepositETH}>
@@ -352,45 +352,45 @@ const Page = () => {
             </div>
 
             <h1 className="text-3xl font-bold mt-6">TSS</h1>
-            <Erc20Balance account={evmAddresses.tss!} />
+            <Erc20Balance account={ContractsConfig.evm_tss} />
             <Erc20Balance
-              contractAddress={evmAddresses.usdc}
-              account={evmAddresses.tss!}
+              contractAddress={ContractsConfig.evm_usdcToken}
+              account={ContractsConfig.evm_tss}
             />
 
             <h1 className="text-3xl font-bold mt-6">ERC20 Custody</h1>
-            <Erc20Balance account={evmAddresses.erc20custody!} />
+            <Erc20Balance account={ContractsConfig.evm_erc20custody} />
             <Erc20Balance
-              contractAddress={evmAddresses.usdc}
-              account={evmAddresses.erc20custody!}
+              contractAddress={ContractsConfig.evm_usdcToken}
+              account={ContractsConfig.evm_erc20custody}
             />
           </div>
           <div className="border-2 p-4 rounded-xl">
             <h1 className="text-4xl font-bold">ZetaChain</h1>
             <h1 className="text-3xl font-bold mt-6">Signer</h1>
             <Erc20Balance
-              contractAddress={zetaAddresses.eth!}
+              contractAddress={ContractsConfig.zeta_ethEthToken}
               account={hardhatAccount}
             />
             <Erc20Balance
-              contractAddress={zetaAddresses.usdc}
+              contractAddress={ContractsConfig.zeta_usdcEthToken}
               account={hardhatAccount}
             />
 
             <h1 className="text-3xl font-bold mt-6">Gateway</h1>
             <Erc20Balance
-              contractAddress={zetaAddresses.usdc}
-              account={zetaAddresses.gateway}
+              contractAddress={ContractsConfig.zeta_usdcEthToken}
+              account={ContractsConfig.zeta_gateway}
             />
             <Erc20Balance
-              contractAddress={zetaAddresses.eth!}
-              account={zetaAddresses.gateway}
+              contractAddress={ContractsConfig.zeta_ethEthToken}
+              account={ContractsConfig.zeta_gateway}
             />
 
             <h1 className="text-3xl font-bold mt-6">My Universal App</h1>
             <Erc20Balance account={universalAppAddress} />
             <Erc20Balance
-              contractAddress={evmAddresses.usdc}
+              contractAddress={ContractsConfig.zeta_usdcEthToken}
               account={universalAppAddress}
             />
             <div className="mt-2">
@@ -401,22 +401,22 @@ const Page = () => {
 
             <h1 className="text-3xl font-bold mt-6">Fungible Module</h1>
             <Erc20Balance
-              contractAddress={zetaAddresses.usdc}
-              account={zetaAddresses.fungibleModule!}
+              contractAddress={ContractsConfig.zeta_usdcEthToken}
+              account={ContractsConfig.zeta_fungibleModule}
             />
             <Erc20Balance
-              contractAddress={zetaAddresses.eth!}
-              account={zetaAddresses.fungibleModule!}
+              contractAddress={ContractsConfig.zeta_ethEthToken}
+              account={ContractsConfig.zeta_fungibleModule}
             />
 
             <h1 className="text-3xl font-bold mt-6">System Contract</h1>
             <Erc20Balance
-              contractAddress={zetaAddresses.usdc}
-              account={zetaAddresses.systemContract!}
+              contractAddress={ContractsConfig.zeta_usdcEthToken}
+              account={ContractsConfig.zeta_systemContract}
             />
             <Erc20Balance
-              contractAddress={zetaAddresses.eth!}
-              account={zetaAddresses.systemContract!}
+              contractAddress={ContractsConfig.zeta_ethEthToken}
+              account={ContractsConfig.zeta_systemContract}
             />
           </div>
         </div>
