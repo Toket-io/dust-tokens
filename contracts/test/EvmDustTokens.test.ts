@@ -85,6 +85,7 @@ describe("EvmDustTokens", function () {
       WETH_ADDRESS
     );
     await dustTokens.deployed();
+    console.log("DustTokens deployed to:", dustTokens.address);
 
     // Connect to ERC20s
     WETH = new hre.ethers.Contract(WETH_ADDRESS, ercAbi, signer);
