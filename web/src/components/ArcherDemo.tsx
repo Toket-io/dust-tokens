@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { Check, ChevronsUpDown, Coins, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
+import { ethers } from "ethers";
+import { signer } from "@/app/page";
 
 const containerStyle = {
   display: "flex",
@@ -70,7 +72,19 @@ const networks = [
   { value: "solana", label: "Solana", enabled: false },
 ];
 
+// Replace with your deployed contract's address and ABI
+const CONTRACT_ADDRESS = "0xac285284705a67da1d182D7821cd51B46621e34A";
+const CONTRACT_ABI = [
+  "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
+  "function addToken(address token) public",
+  "function removeToken(address token) public",
+  "function getTokens() view returns (address[], string[], string[], uint8[])",
+];
+
 export default function Component() {
+  // const [provider, setProvider] = useState(null);
+  const [contract, setContract] = useState(null);
+  const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
@@ -87,6 +101,20 @@ export default function Component() {
     value: string;
     label: string;
   } | null>(null);
+
+  useEffect(() => {
+    const initializeProvider = async () => {
+      const contract = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        signer
+      );
+      console.log("Contract initialized:", contract);
+      setContract(contract);
+    };
+
+    initializeProvider();
+  }, []);
 
   const handleSwapConfirm = async () => {
     setLoading(true);
@@ -138,6 +166,29 @@ export default function Component() {
           : token
       )
     );
+  };
+
+  const fetchBalances = async () => {
+    try {
+      setLoading(true);
+      const [addresses, names, symbols, decimals, tokenBalances] =
+        await contract.getBalances(signer.address);
+      const formattedBalances = addresses.map((address, index) => ({
+        address,
+        name: names[index],
+        symbol: symbols[index],
+        decimals: decimals[index],
+        balance: ethers.utils.formatUnits(
+          tokenBalances[index],
+          decimals[index]
+        ),
+      }));
+      setBalances(formattedBalances);
+    } catch (error) {
+      console.error("Error fetching balances:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const sortedTokens = [...tokens].sort((a, b) => b.balance - a.balance);
@@ -212,53 +263,72 @@ export default function Component() {
               ]}
             >
               <div className="w-64">
-                <Popover open={openToken} onOpenChange={setOpenToken}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openToken}
-                      className="w-full justify-between"
-                    >
-                      Select token
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput placeholder="Search tokens..." />
-                      <CommandList>
-                        <CommandEmpty>No token found.</CommandEmpty>
-                        <CommandGroup>
-                          {sortedTokens.map((token) => (
-                            <CommandItem
-                              key={token.value}
-                              onSelect={() => handleSelectToken(token)}
-                              className={cn(
-                                token.balance === 0 && "opacity-50"
-                              )}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  selectedTokens.some(
-                                    (t) => t.value === token.value
-                                  )
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              <span className="flex-1">{token.label}</span>
-                              <CommandShortcut>
-                                {token.balance.toFixed(2)}
-                              </CommandShortcut>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <Card className="rounded-2xl items-start w-64">
+                  <CardContent>
+                    <div className="items-center w-full pt-6 space-y-2">
+                      <Popover open={openToken} onOpenChange={setOpenToken}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openToken}
+                            className="w-full justify-between"
+                          >
+                            Select token
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput placeholder="Search tokens..." />
+                            <CommandList>
+                              <CommandEmpty>No token found.</CommandEmpty>
+                              <CommandGroup>
+                                {sortedTokens.map((token) => (
+                                  <CommandItem
+                                    key={token.value}
+                                    onSelect={() => handleSelectToken(token)}
+                                    className={cn(
+                                      token.balance === 0 && "opacity-50"
+                                    )}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        selectedTokens.some(
+                                          (t) => t.value === token.value
+                                        )
+                                          ? "opacity-100"
+                                          : "opacity-0"
+                                      )}
+                                    />
+                                    <span className="flex-1">
+                                      {token.label}
+                                    </span>
+                                    <CommandShortcut>
+                                      {token.balance.toFixed(2)}
+                                    </CommandShortcut>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <p className="text-center">or</p>
+                      <Button
+                        variant="secondary"
+                        size="full"
+                        onClick={() => handleMaxAmount("token.value")}
+                        // className={cn(
+                        //   true && "bg-primary text-primary-foreground"
+                        // )}
+                      >
+                        Auto-select
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </ArcherElement>
           </div>
