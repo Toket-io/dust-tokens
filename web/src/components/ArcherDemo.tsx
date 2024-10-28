@@ -99,6 +99,7 @@ export default function Component() {
   const [contract, setContract] = useState(null);
   const [balances, setBalances] = useState<Token[]>([]);
   const [loading, setLoading] = useState(false);
+  const [transactionPending, setTransactionPending] = useState(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<SelectedToken[]>([]);
@@ -122,9 +123,9 @@ export default function Component() {
   }, []);
 
   const handleSwapConfirm = async () => {
-    setLoading(true);
+    setTransactionPending(true);
     await new Promise((resolve) => setTimeout(resolve, 4000));
-    setLoading(false);
+    setTransactionPending(false);
   };
 
   const handleSelectToken = (token: Token) => {
@@ -154,6 +155,7 @@ export default function Component() {
   };
 
   const handleAmountChange = (tokenValue: string, amount: string) => {
+    // TODO: Check that amount is a valid number and within the token's balance
     setSelectedTokens(
       selectedTokens.map((token) =>
         token.symbol === tokenValue ? { ...token, amount, isMax: false } : token
@@ -236,6 +238,7 @@ export default function Component() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveToken(token.symbol)}
+                        disabled={loading || transactionPending}
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -256,6 +259,7 @@ export default function Component() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleMaxAmount(token.symbol)}
+                        disabled={loading || transactionPending}
                         className={cn(
                           token.isMax && "bg-primary text-primary-foreground"
                         )}
@@ -290,6 +294,7 @@ export default function Component() {
                             role="combobox"
                             aria-expanded={openToken}
                             className="w-full justify-between"
+                            disabled={loading || transactionPending}
                           >
                             Select token
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -335,6 +340,7 @@ export default function Component() {
                         variant="secondary"
                         size="full"
                         onClick={autoSelectTokens}
+                        disabled={loading || transactionPending}
                       >
                         Auto-select
                       </Button>
@@ -361,7 +367,7 @@ export default function Component() {
                 <span className="relative flex h-32	w-32">
                   <span
                     className={`${
-                      loading ? "animate-ping" : ""
+                      transactionPending ? "animate-ping" : ""
                     } absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75`}
                   ></span>
                   <Image
@@ -390,6 +396,7 @@ export default function Component() {
                       role="combobox"
                       aria-expanded={openNetwork}
                       className="w-full justify-between"
+                      disabled={loading || transactionPending}
                     >
                       {selectedNetwork?.label || "Select Network"}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
