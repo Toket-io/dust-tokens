@@ -87,16 +87,16 @@ const networks = [
 ];
 
 // Replace with your deployed contract's address and ABI
-const CONTRACT_ADDRESS = "0x41a6c42E4f6D77e461195BD448116fdEA8B8989e";
+const CONTRACT_ADDRESS = "0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF";
 const CONTRACT_ABI = [
   "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
   "function addToken(address token) public",
   "function removeToken(address token) public",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
-  "function SwapAndBridgeTokens(tuple(uint256, address)[], address, bytes, tuple(bool, uint256, address, bytes)) public",
+  "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions) public",
 ];
 
-const UNIVERSAL_APP_ADDRESS = "0xA82E7060a8bD3CEe464437BFdb0Ccf7Cd9c04387";
+const UNIVERSAL_APP_ADDRESS = "0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2";
 
 const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
 
@@ -132,7 +132,7 @@ export default function Component() {
     setTransactionPending(true);
     await handleApproves();
     await handleSwapAndBridge();
-    // await new Promise((resolve) => setTimeout(resolve, 4000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     setTransactionPending(false);
   };
 
@@ -217,16 +217,34 @@ export default function Component() {
     // Loop through selected tokens and approve them
     for (const token of selectedTokens) {
       const tokenContract = new ethers.Contract(token.address, ercAbi, signer);
-      const tx = await tokenContract.approve(CONTRACT_ADDRESS, token.amount);
+      const amount = ethers.utils.parseUnits(token.amount, token.decimals);
+      const tx = await tokenContract.approve(CONTRACT_ADDRESS, amount);
       await tx.wait();
 
-      console.log("Approved token:", token.name);
+      console.log(
+        "Approved token:",
+        token.name,
+        amount.toString(),
+        token.amount
+      );
     }
   };
 
   const handleSwapAndBridge = async () => {
     try {
-      setLoading(true);
+      setTransactionPending(true);
+
+      if (!UNIVERSAL_APP_ADDRESS) {
+        throw new Error("UNIVERSAL_APP_ADDRESS is not defined");
+      }
+
+      if (!ZETA_USDC_ETH_ADDRESS) {
+        throw new Error("ZETA_USDC_ETH_ADDRESS is not defined");
+      }
+
+      if (!signer || !signer.address) {
+        throw new Error("Signer or signer address is not properly initialized");
+      }
 
       const args = {
         revertOptions: {
@@ -286,8 +304,15 @@ export default function Component() {
         encodedParameters,
         revertOptions
       );
-      console.log("Contract:", await contract.getTokens());
-      const tx = await contract.SwapAndBridgeTokens(
+
+      const contractInstance = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        signer
+      );
+
+      console.log("Contract:", await contractInstance.getTokens());
+      const tx = await contractInstance.SwapAndBridgeTokens(
         tokenSwaps,
         UNIVERSAL_APP_ADDRESS,
         encodedParameters,
@@ -299,7 +324,7 @@ export default function Component() {
     } catch (error) {
       console.error("Swap and bridge failed:", error);
     } finally {
-      setLoading(false);
+      setTransactionPending(true);
     }
   };
 
@@ -552,9 +577,6 @@ export default function Component() {
       </div>
       <div>
         <h3>Balances</h3>
-        <button onClick={fetchBalances} disabled={loading}>
-          Fetch Balances
-        </button>
         <ul>
           {balances.map(({ address, name, symbol, decimals, balance }) => (
             <li key={address}>
@@ -562,12 +584,6 @@ export default function Component() {
                 {name} ({symbol})
               </strong>
               : {balance} (Decimals: {decimals})
-              <button
-                onClick={() => handleRemoveToken(address)}
-                disabled={loading}
-              >
-                Remove
-              </button>
             </li>
           ))}
         </ul>
