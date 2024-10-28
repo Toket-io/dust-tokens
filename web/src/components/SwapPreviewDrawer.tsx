@@ -34,28 +34,15 @@ import {
   Trash,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { SelectedToken } from "./ArcherDemo";
 
 type ProfileFormDrawerProps = {
-  selectedTokens: {
-    value: string;
-    label: string;
-    amount: string;
-    balance: number;
-    isMax: boolean;
-  }[];
+  selectedTokens: SelectedToken[];
   selectedNetwork: {
     value: string;
     label: string;
   } | null;
-  onConfirm: (
-    selectedTokens: {
-      value: string;
-      label: string;
-      amount: string;
-      balance: number;
-      isMax: boolean;
-    }[]
-  ) => void;
+  onConfirm: (selectedTokens: SelectedToken[]) => void;
 };
 
 export function SwapPreviewDrawer({
@@ -102,7 +89,9 @@ export function SwapPreviewDrawer({
             <div className="font-semibold">Input Tokens:</div>
             {selectedTokens.map((token, index) => (
               <div key={index} className="flex justify-between items-center">
-                <span>{token.label}</span>
+                <span>
+                  {token.name} {`(${token.symbol})`}
+                </span>
                 <span>{token.amount}</span>
               </div>
             ))}

@@ -54,16 +54,29 @@ const boxStyle = {
   marginBottom: "20px",
 };
 
-const tokens = [
-  { value: "btc", label: "Bitcoin (BTC)", balance: 0.5 },
-  { value: "eth", label: "Ethereum (ETH)", balance: 2.3 },
-  { value: "usdt", label: "Tether (USDT)", balance: 1000 },
-  { value: "bnb", label: "Binance Coin (BNB)", balance: 10 },
-  { value: "usdc", label: "USD Coin (USDC)", balance: 500 },
-  { value: "xrp", label: "Ripple (XRP)", balance: 0 },
-  { value: "ada", label: "Cardano (ADA)", balance: 0 },
-  { value: "doge", label: "Dogecoin (DOGE)", balance: 1000 },
-];
+export interface Token {
+  name: string;
+  symbol: string;
+  decimals: number;
+  balance: number;
+  address: string;
+}
+
+export type SelectedToken = Token & {
+  amount: string;
+  isMax: boolean;
+};
+
+// const tokens = [
+//   { value: "btc", label: "Bitcoin (BTC)", balance: 0.5 },
+//   { value: "eth", label: "Ethereum (ETH)", balance: 2.3 },
+//   { value: "usdt", label: "Tether (USDT)", balance: 1000 },
+//   { value: "bnb", label: "Binance Coin (BNB)", balance: 10 },
+//   { value: "usdc", label: "USD Coin (USDC)", balance: 500 },
+//   { value: "xrp", label: "Ripple (XRP)", balance: 0 },
+//   { value: "ada", label: "Cardano (ADA)", balance: 0 },
+//   { value: "doge", label: "Dogecoin (DOGE)", balance: 1000 },
+// ];
 
 const networks = [
   { value: "ethereum", label: "Ethereum (ETH)", enabled: true },
@@ -84,19 +97,11 @@ const CONTRACT_ABI = [
 export default function Component() {
   // const [provider, setProvider] = useState(null);
   const [contract, setContract] = useState(null);
-  const [balances, setBalances] = useState([]);
+  const [balances, setBalances] = useState<Token[]>([]);
   const [loading, setLoading] = useState(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
-  const [selectedTokens, setSelectedTokens] = useState<
-    {
-      value: string;
-      label: string;
-      amount: string;
-      balance: number;
-      isMax: boolean;
-    }[]
-  >([]);
+  const [selectedTokens, setSelectedTokens] = useState<SelectedToken[]>([]);
   const [selectedNetwork, setSelectedNetwork] = useState<{
     value: string;
     label: string;
@@ -109,8 +114,8 @@ export default function Component() {
         CONTRACT_ABI,
         signer
       );
-      console.log("Contract initialized:", contract);
       setContract(contract);
+      fetchBalances(contract);
     };
 
     initializeProvider();
@@ -122,27 +127,25 @@ export default function Component() {
     setLoading(false);
   };
 
-  const handleSelectToken = (token: {
-    value: string;
-    label: string;
-    balance: number;
-  }) => {
+  const handleSelectToken = (token: Token) => {
     if (
       selectedTokens.length < 5 &&
-      !selectedTokens.some((t) => t.value === token.value)
+      !selectedTokens.some((t) => t.symbol === token.symbol)
     ) {
       setSelectedTokens([
         ...selectedTokens,
         { ...token, amount: "", isMax: false },
       ]);
     } else {
-      setSelectedTokens(selectedTokens.filter((t) => t.value !== token.value));
+      setSelectedTokens(
+        selectedTokens.filter((t) => t.symbol !== token.symbol)
+      );
     }
     setOpenToken(false);
   };
 
   const handleRemoveToken = (tokenValue: string) => {
-    setSelectedTokens(selectedTokens.filter((t) => t.value !== tokenValue));
+    setSelectedTokens(selectedTokens.filter((t) => t.symbol !== tokenValue));
   };
 
   const handleSelectNetwork = (network: { value: string; label: string }) => {
@@ -153,7 +156,7 @@ export default function Component() {
   const handleAmountChange = (tokenValue: string, amount: string) => {
     setSelectedTokens(
       selectedTokens.map((token) =>
-        token.value === tokenValue ? { ...token, amount, isMax: false } : token
+        token.symbol === tokenValue ? { ...token, amount, isMax: false } : token
       )
     );
   };
@@ -161,26 +164,25 @@ export default function Component() {
   const handleMaxAmount = (tokenValue: string) => {
     setSelectedTokens(
       selectedTokens.map((token) =>
-        token.value === tokenValue
+        token.symbol === tokenValue
           ? { ...token, amount: token.balance.toString(), isMax: true }
           : token
       )
     );
   };
 
-  const fetchBalances = async () => {
+  const fetchBalances = async (contractInstance) => {
     try {
       setLoading(true);
       const [addresses, names, symbols, decimals, tokenBalances] =
-        await contract.getBalances(signer.address);
-      const formattedBalances = addresses.map((address, index) => ({
+        await contractInstance.getBalances(signer.address);
+      const formattedBalances: Token[] = addresses.map((address, index) => ({
         address,
         name: names[index],
         symbol: symbols[index],
         decimals: decimals[index],
-        balance: ethers.utils.formatUnits(
-          tokenBalances[index],
-          decimals[index]
+        balance: Number(
+          ethers.utils.formatUnits(tokenBalances[index], decimals[index])
         ),
       }));
       setBalances(formattedBalances);
@@ -191,7 +193,22 @@ export default function Component() {
     }
   };
 
-  const sortedTokens = [...tokens].sort((a, b) => b.balance - a.balance);
+  const autoSelectTokens = () => {
+    const tokensWithBalance = balances.filter((token) => token.balance > 0);
+    tokensWithBalance.sort((a, b) => b.balance - a.balance);
+
+    const selected = tokensWithBalance.flatMap((token) => {
+      return {
+        ...token,
+        amount: token.balance.toString(),
+        isMax: true,
+      };
+    });
+
+    setSelectedTokens(selected);
+  };
+
+  const sortedTokens = [...balances].sort((a, b) => b.balance - a.balance);
 
   return (
     <div>
@@ -214,11 +231,11 @@ export default function Component() {
                 <Card className="rounded-2xl mb-4 items-start w-64">
                   <CardHeader>
                     <div className="flex justify-between items-center w-full">
-                      <CardTitle>{token.label}</CardTitle>
+                      <CardTitle>{token.name}</CardTitle>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleRemoveToken(token.value)}
+                        onClick={() => handleRemoveToken(token.symbol)}
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -230,7 +247,7 @@ export default function Component() {
                         type="number"
                         value={token.amount}
                         onChange={(e) =>
-                          handleAmountChange(token.value, e.target.value)
+                          handleAmountChange(token.symbol, e.target.value)
                         }
                         className="w-full mr-2"
                         placeholder="Amount"
@@ -238,7 +255,7 @@ export default function Component() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleMaxAmount(token.value)}
+                        onClick={() => handleMaxAmount(token.symbol)}
                         className={cn(
                           token.isMax && "bg-primary text-primary-foreground"
                         )}
@@ -286,7 +303,7 @@ export default function Component() {
                               <CommandGroup>
                                 {sortedTokens.map((token) => (
                                   <CommandItem
-                                    key={token.value}
+                                    key={token.symbol}
                                     onSelect={() => handleSelectToken(token)}
                                     className={cn(
                                       token.balance === 0 && "opacity-50"
@@ -296,15 +313,13 @@ export default function Component() {
                                       className={cn(
                                         "mr-2 h-4 w-4",
                                         selectedTokens.some(
-                                          (t) => t.value === token.value
+                                          (t) => t.symbol === token.symbol
                                         )
                                           ? "opacity-100"
                                           : "opacity-0"
                                       )}
                                     />
-                                    <span className="flex-1">
-                                      {token.label}
-                                    </span>
+                                    <span className="flex-1">{token.name}</span>
                                     <CommandShortcut>
                                       {token.balance.toFixed(2)}
                                     </CommandShortcut>
@@ -319,10 +334,7 @@ export default function Component() {
                       <Button
                         variant="secondary"
                         size="full"
-                        onClick={() => handleMaxAmount("token.value")}
-                        // className={cn(
-                        //   true && "bg-primary text-primary-foreground"
-                        // )}
+                        onClick={autoSelectTokens}
                       >
                         Auto-select
                       </Button>
@@ -422,14 +434,28 @@ export default function Component() {
           selectedNetwork={selectedNetwork}
           onConfirm={handleSwapConfirm}
         />
-        {/* <Button
-          size="lg"
-          onClick={() => console.log(selectedTokens, selectedNetwork)}
-          disabled={!selectedTokens.length || !selectedNetwork}
-        >
-          <Coins className="h-4 w-4 mr-2" />
-          Preview Swap
-        </Button> */}
+      </div>
+      <div>
+        <h3>Balances</h3>
+        <button onClick={fetchBalances} disabled={loading}>
+          Fetch Balances
+        </button>
+        <ul>
+          {balances.map(({ address, name, symbol, decimals, balance }) => (
+            <li key={address}>
+              <strong>
+                {name} ({symbol})
+              </strong>
+              : {balance} (Decimals: {decimals})
+              <button
+                onClick={() => handleRemoveToken(address)}
+                disabled={loading}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );
