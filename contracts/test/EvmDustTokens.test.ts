@@ -103,6 +103,7 @@ describe("EvmDustTokens", function () {
       ZETA_GATEWAY_ADDRESS
     );
     await universalApp.deployed();
+    console.log("Universal app deployed to:", universalApp.address);
 
     // Connect to ERC20s
     ZETA_USDC_ETH = new hre.ethers.Contract(
