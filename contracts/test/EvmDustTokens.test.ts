@@ -35,6 +35,9 @@ const UNISWAP_ROUTER: string = ContractsConfig.evm_uniswapRouterV3;
 
 const ercAbi = [
   // Read-Only Functions
+  "function symbol() view returns (string)",
+  "function name() view returns (string)",
+  "function decimals() view returns (uint8)",
   "function balanceOf(address owner) view returns (uint256)",
   // Authenticated Functions
   "function transfer(address to, uint amount) returns (bool)",
@@ -747,24 +750,13 @@ describe("EvmDustTokens", function () {
     expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
   });
 
-  it.only("SwapAndBridgeTokens", async function () {
+  it("SwapAndBridgeTokens", async function () {
     const args = {
-      amount: "10",
-      erc20: null,
-      gatewayEvm: GATEWAY_ADDRESS,
-      receiver: universalApp.address,
       revertOptions: {
         callOnRevert: false,
         onRevertGasLimit: 7000000,
         revertAddress: "0x0000000000000000000000000000000000000000",
         revertMessage: "0x",
-      },
-      txOptions: {
-        gasLimit: 1000000,
-        gasPrice: {
-          hex: "0x3b9aca00",
-          type: "BigNumber",
-        },
       },
       types: ["address", "bytes"],
       values: [ZETA_USDC_ETH_ADDRESS, signer.address],
@@ -887,27 +879,29 @@ describe("EvmDustTokens", function () {
     // expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
   });
 
-  it.only("Should handle multiple tokens correctly", async function () {
-    const token1 = DAI;
-    const token2 = LINK;
-    const token3 = UNI;
-    await dustTokens.addToken(token1.address);
-    await dustTokens.addToken(token2.address);
-    await dustTokens.addToken(token3.address);
+  it("Should handle multiple tokens and balances", async function () {
+    await dustTokens.addToken(DAI.address);
+    await dustTokens.addToken(LINK.address);
+    await dustTokens.addToken(UNI.address);
 
     let tokens = await dustTokens.getTokens();
-    expect(tokens).to.deep.equal([
-      token1.address,
-      token2.address,
-      token3.address,
-    ]);
+    expect(tokens).to.deep.equal([DAI.address, LINK.address, UNI.address]);
 
-    await dustTokens.removeToken(token1.address);
+    await dustTokens.removeToken(DAI.address);
 
     tokens = await dustTokens.getTokens();
-    expect(tokens).to.deep.equal([token3.address, token2.address]);
+    expect(tokens).to.deep.equal([UNI.address, LINK.address]);
 
     const balances = await dustTokens.getBalances(signer.address);
-    console.log("Balances: ", balances);
+    expect(balances).to.deep.equal([
+      [UNI.address, LINK.address],
+      [await UNI.name(), await LINK.name()],
+      [await UNI.symbol(), await LINK.symbol()],
+      [await UNI.decimals(), await LINK.decimals()],
+      [
+        await UNI.balanceOf(signer.address),
+        await LINK.balanceOf(signer.address),
+      ],
+    ]);
   });
 });
