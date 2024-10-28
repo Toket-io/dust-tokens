@@ -31,9 +31,16 @@ interface IERC20Metadata {
     function balanceOf(address account) external view returns (uint256);
 }
 
-struct TokenSwap {
+struct SwapInput {
     address token;
     uint256 amount;
+}
+
+struct SwapOutput {
+    address tokenIn;
+    address tokenOut;
+    uint256 amountIn;
+    uint256 amountOut;
 }
 
 contract EvmDustTokens {
@@ -42,26 +49,15 @@ contract EvmDustTokens {
     address[] private tokenList;
     ISwapRouter public immutable swapRouter;
     address payable public immutable WETH9;
-
     uint24 public constant feeTier = 3000;
 
     event TokenAdded(address indexed token);
     event TokenRemoved(address indexed token);
-
-    // Define the event to track the swaps and deposits
     event SwappedAndDeposited(
         address indexed executor,
-        PerformedSwap[] swaps,
+        SwapOutput[] swaps,
         uint256 totalTokensReceived
     );
-
-    // Define the PerformedSwap struct
-    struct PerformedSwap {
-        address tokenIn;
-        address tokenOut;
-        uint256 amountIn;
-        uint256 amountOut;
-    }
 
     constructor(
         address payable gatewayAddress,
@@ -76,7 +72,7 @@ contract EvmDustTokens {
     receive() external payable {}
 
     function SwapAndBridgeTokens(
-        TokenSwap[] memory swaps,
+        SwapInput[] memory swaps,
         address universalApp,
         bytes calldata payload,
         RevertOptions calldata revertOptions
@@ -87,13 +83,11 @@ contract EvmDustTokens {
         require(swaps.length > 0, "No swaps provided");
 
         // Create an array to store the performed swaps
-        PerformedSwap[] memory performedSwaps = new PerformedSwap[](
-            swaps.length
-        );
+        SwapOutput[] memory performedSwaps = new SwapOutput[](swaps.length);
 
         // Loop through each ERC-20 token address provided
         for (uint256 i = 0; i < swaps.length; i++) {
-            TokenSwap memory swap = swaps[i];
+            SwapInput memory swap = swaps[i];
             address token = swap.token;
             uint256 amount = swap.amount;
 
@@ -136,7 +130,7 @@ contract EvmDustTokens {
             totalTokensReceived += amountOut;
 
             // Store the performed swap details
-            performedSwaps[i] = PerformedSwap({
+            performedSwaps[i] = SwapOutput({
                 tokenIn: token,
                 tokenOut: WETH9,
                 amountIn: amount,
@@ -179,32 +173,8 @@ contract EvmDustTokens {
         }
     }
 
-    function getTokens()
-        external
-        view
-        returns (
-            address[] memory,
-            string[] memory,
-            string[] memory,
-            uint8[] memory
-        )
-    {
-        uint256 length = tokenList.length;
-
-        address[] memory addresses = new address[](length);
-        string[] memory names = new string[](length);
-        string[] memory symbols = new string[](length);
-        uint8[] memory decimalsList = new uint8[](length);
-
-        for (uint256 i = 0; i < length; i++) {
-            IERC20Metadata token = IERC20Metadata(tokenList[i]);
-            addresses[i] = tokenList[i];
-            names[i] = token.name();
-            symbols[i] = token.symbol();
-            decimalsList[i] = token.decimals();
-        }
-
-        return (addresses, names, symbols, decimalsList);
+    function getTokens() external view returns (address[] memory) {
+        return tokenList;
     }
 
     function getBalances(
