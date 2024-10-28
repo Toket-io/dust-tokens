@@ -21,11 +21,16 @@ import {
 import { CircleCheck } from "lucide-react";
 
 type SwapSuccessDrawerProps = {
+  totalEthOutput: string;
   open: boolean;
   setOpen: (open: boolean) => void;
 };
 
-export function SwapSuccessDrawer({ open, setOpen }: SwapSuccessDrawerProps) {
+export function SwapSuccessDrawer({
+  totalEthOutput,
+  open,
+  setOpen,
+}: SwapSuccessDrawerProps) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   const handleGoBack = () => {
@@ -51,6 +56,7 @@ export function SwapSuccessDrawer({ open, setOpen }: SwapSuccessDrawerProps) {
 
             <DialogDescription>
               Your tokens have been successfully swapped and bridged!
+              <p>ETH received: {totalEthOutput}</p>
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col space-y-2">
@@ -71,6 +77,7 @@ export function SwapSuccessDrawer({ open, setOpen }: SwapSuccessDrawerProps) {
           <DrawerTitle>{"Success"}</DrawerTitle>
           <DrawerDescription>
             Your tokens have been successfully swapped and bridged!
+            <p>ETH received: {totalEthOutput}</p>
           </DrawerDescription>
         </DrawerHeader>
 

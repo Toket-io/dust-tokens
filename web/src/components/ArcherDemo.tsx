@@ -95,6 +95,7 @@ const CONTRACT_ABI = [
   "function removeToken(address token) public",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
   "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions) public",
+  "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
 ];
 
 const UNIVERSAL_APP_ADDRESS = "0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2";
@@ -107,6 +108,7 @@ export default function Component() {
   const [balances, setBalances] = useState<Token[]>([]);
   const [loading, setLoading] = useState(false);
   const [transactionPending, setTransactionPending] = useState(false);
+  const [totalEthOutput, setTotalEthOutput] = useState<string>("");
   const [showSuccess, setShowSuccess] = useState<boolean>(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
@@ -323,7 +325,39 @@ export default function Component() {
       );
 
       const receipt = await tx.wait();
+
       console.log("Transaction successful:", receipt);
+      // Search for the specific event by name
+
+      // Filter and decode the SwappedAndDeposited event
+      receipt.events.forEach((event) => {
+        if (event.event === "SwappedAndDeposited") {
+          console.log("SwappedAndDeposited event detected!");
+
+          // Decode event arguments
+          const decoded = contractInstance.interface.decodeEventLog(
+            "SwappedAndDeposited",
+            event.data,
+            event.topics
+          );
+
+          console.log("Executor:", decoded.executor);
+          const totalEther = ethers.utils.formatEther(
+            decoded.totalTokensReceived
+          );
+          setTotalEthOutput(totalEther);
+          console.log("Total Tokens Received:", totalEther);
+          console.log("Swaps:", decoded.swaps);
+
+          decoded.swaps.forEach((swap, index) => {
+            console.log(`Swap ${index + 1}:`);
+            console.log(`  Token In: ${swap.tokenIn}`);
+            console.log(`  Token Out: ${swap.tokenOut}`);
+            console.log(`  Amount In: ${swap.amountIn.toString()}`);
+            console.log(`  Amount Out: ${swap.amountOut.toString()}`);
+          });
+        }
+      });
     } catch (error) {
       console.error("Swap and bridge failed:", error);
     } finally {
@@ -579,7 +613,11 @@ export default function Component() {
         />
       </div>
 
-      <SwapSuccessDrawer open={showSuccess} setOpen={setShowSuccess} />
+      <SwapSuccessDrawer
+        totalEthOutput={totalEthOutput}
+        open={showSuccess}
+        setOpen={setShowSuccess}
+      />
       <div>
         <h3>Balances</h3>
         <ul>
