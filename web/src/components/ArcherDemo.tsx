@@ -618,7 +618,7 @@ export default function Component() {
         open={showSuccess}
         setOpen={setShowSuccess}
       />
-      <div>
+      {/* <div>
         <h3>Balances</h3>
         <ul>
           {balances.map(({ address, name, symbol, decimals, balance }) => (
@@ -630,7 +630,7 @@ export default function Component() {
             </li>
           ))}
         </ul>
-      </div>
+      </div> */}
     </div>
   );
 }
