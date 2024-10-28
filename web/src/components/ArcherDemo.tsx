@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 import { ethers } from "ethers";
 import { signer } from "@/app/page";
+import ContractsConfig from "../../../ContractsConfig";
 
 const containerStyle = {
   display: "flex",
@@ -86,13 +87,18 @@ const networks = [
 ];
 
 // Replace with your deployed contract's address and ABI
-const CONTRACT_ADDRESS = "0xac285284705a67da1d182D7821cd51B46621e34A";
+const CONTRACT_ADDRESS = "0x41a6c42E4f6D77e461195BD448116fdEA8B8989e";
 const CONTRACT_ABI = [
   "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
   "function addToken(address token) public",
   "function removeToken(address token) public",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
+  "function SwapAndBridgeTokens(tuple(uint256, address)[], address, bytes, tuple(bool, uint256, address, bytes)) public",
 ];
+
+const UNIVERSAL_APP_ADDRESS = "0xA82E7060a8bD3CEe464437BFdb0Ccf7Cd9c04387";
+
+const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
 
 export default function Component() {
   // const [provider, setProvider] = useState(null);
@@ -124,7 +130,9 @@ export default function Component() {
 
   const handleSwapConfirm = async () => {
     setTransactionPending(true);
-    await new Promise((resolve) => setTimeout(resolve, 4000));
+    await handleApproves();
+    await handleSwapAndBridge();
+    // await new Promise((resolve) => setTimeout(resolve, 4000));
     setTransactionPending(false);
   };
 
@@ -190,6 +198,106 @@ export default function Component() {
       setBalances(formattedBalances);
     } catch (error) {
       console.error("Error fetching balances:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproves = async () => {
+    const ercAbi = [
+      // Read-Only Functions
+      "function balanceOf(address owner) view returns (uint256)",
+      // Authenticated Functions
+      "function transfer(address to, uint amount) returns (bool)",
+      "function deposit() public payable",
+      "function approve(address spender, uint256 amount) returns (bool)",
+      "function withdraw(uint256 wad) external",
+    ];
+
+    // Loop through selected tokens and approve them
+    for (const token of selectedTokens) {
+      const tokenContract = new ethers.Contract(token.address, ercAbi, signer);
+      const tx = await tokenContract.approve(CONTRACT_ADDRESS, token.amount);
+      await tx.wait();
+
+      console.log("Approved token:", token.name);
+    }
+  };
+
+  const handleSwapAndBridge = async () => {
+    try {
+      setLoading(true);
+
+      const args = {
+        revertOptions: {
+          callOnRevert: false,
+          onRevertGasLimit: 7000000,
+          revertAddress: "0x0000000000000000000000000000000000000000",
+          revertMessage: "0x",
+        },
+        types: ["address", "bytes"],
+        values: [ZETA_USDC_ETH_ADDRESS, signer.address],
+      };
+
+      console.log("Selected tokens:", args);
+
+      // Prepare encoded parameters for the call
+      const valuesArray = args.values.map((value, index) => {
+        const type = args.types[index];
+        if (type === "bool") {
+          try {
+            return JSON.parse(value.toLowerCase());
+          } catch (e) {
+            throw new Error(`Invalid boolean value: ${value}`);
+          }
+        } else if (type.startsWith("uint") || type.startsWith("int")) {
+          return ethers.BigNumber.from(value);
+        } else {
+          return value;
+        }
+      });
+
+      const encodedParameters = ethers.utils.defaultAbiCoder.encode(
+        args.types,
+        valuesArray
+      );
+
+      const revertOptions = {
+        abortAddress: "0x0000000000000000000000000000000000000000", // not used
+        callOnRevert: args.revertOptions.callOnRevert,
+        onRevertGasLimit: args.revertOptions.onRevertGasLimit,
+        revertAddress: args.revertOptions.revertAddress,
+        revertMessage: ethers.utils.hexlify(
+          ethers.utils.toUtf8Bytes(args.revertOptions.revertMessage)
+        ),
+      };
+
+      const tokenSwaps = selectedTokens.map(
+        ({ amount, decimals, address }) => ({
+          amount: ethers.utils.parseUnits(amount, decimals),
+          token: address,
+        })
+      );
+
+      console.log(
+        "TODOS LOS ARGS:",
+        tokenSwaps,
+        UNIVERSAL_APP_ADDRESS,
+        encodedParameters,
+        revertOptions
+      );
+      console.log("Contract:", await contract.getTokens());
+      const tx = await contract.SwapAndBridgeTokens(
+        tokenSwaps,
+        UNIVERSAL_APP_ADDRESS,
+        encodedParameters,
+        revertOptions
+      );
+
+      const receipt = await tx.wait();
+      console.log("Transaction successful:", receipt);
+    } catch (error) {
+      console.error("Swap and bridge failed:", error);
     } finally {
       setLoading(false);
     }
