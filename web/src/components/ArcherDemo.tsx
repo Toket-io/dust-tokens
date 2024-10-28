@@ -24,6 +24,7 @@ import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 import { ethers } from "ethers";
 import { signer } from "@/app/page";
 import ContractsConfig from "../../../ContractsConfig";
+import { SwapSuccessDrawer } from "./SwapSuccessDrawer";
 
 const containerStyle = {
   display: "flex",
@@ -106,6 +107,7 @@ export default function Component() {
   const [balances, setBalances] = useState<Token[]>([]);
   const [loading, setLoading] = useState(false);
   const [transactionPending, setTransactionPending] = useState(false);
+  const [showSuccess, setShowSuccess] = useState<boolean>(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<SelectedToken[]>([]);
@@ -134,6 +136,7 @@ export default function Component() {
     await handleSwapAndBridge();
     await new Promise((resolve) => setTimeout(resolve, 2000));
     setTransactionPending(false);
+    setShowSuccess(true);
   };
 
   const handleSelectToken = (token: Token) => {
@@ -324,7 +327,7 @@ export default function Component() {
     } catch (error) {
       console.error("Swap and bridge failed:", error);
     } finally {
-      setTransactionPending(true);
+      // setTransactionPending(false);
     }
   };
 
@@ -575,6 +578,8 @@ export default function Component() {
           onConfirm={handleSwapConfirm}
         />
       </div>
+
+      <SwapSuccessDrawer open={showSuccess} setOpen={setShowSuccess} />
       <div>
         <h3>Balances</h3>
         <ul>
