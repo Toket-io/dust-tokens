@@ -20,6 +20,17 @@ interface IWETH is IERC20 {
     function withdrawTo(address account, uint256 amount) external;
 }
 
+// Custom ERC20 Interface with optional metadata functions
+interface IERC20Metadata {
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external view returns (uint8);
+
+    function balanceOf(address account) external view returns (uint256);
+}
+
 struct TokenSwap {
     address token;
     uint256 amount;
@@ -168,19 +179,64 @@ contract EvmDustTokens {
         }
     }
 
-    function getTokens() external view returns (address[] memory) {
-        return tokenList;
+    function getTokens()
+        external
+        view
+        returns (
+            address[] memory,
+            string[] memory,
+            string[] memory,
+            uint8[] memory
+        )
+    {
+        uint256 length = tokenList.length;
+
+        address[] memory addresses = new address[](length);
+        string[] memory names = new string[](length);
+        string[] memory symbols = new string[](length);
+        uint8[] memory decimalsList = new uint8[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            IERC20Metadata token = IERC20Metadata(tokenList[i]);
+            addresses[i] = tokenList[i];
+            names[i] = token.name();
+            symbols[i] = token.symbol();
+            decimalsList[i] = token.decimals();
+        }
+
+        return (addresses, names, symbols, decimalsList);
     }
 
     function getBalances(
         address user
-    ) external view returns (address[] memory, uint256[] memory) {
-        uint256[] memory balances = new uint256[](tokenList.length);
+    )
+        external
+        view
+        returns (
+            address[] memory,
+            string[] memory,
+            string[] memory,
+            uint8[] memory,
+            uint256[] memory
+        )
+    {
+        uint256 length = tokenList.length;
 
-        for (uint256 i = 0; i < tokenList.length; i++) {
-            balances[i] = IERC20(tokenList[i]).balanceOf(user);
+        address[] memory addresses = new address[](length);
+        string[] memory names = new string[](length);
+        string[] memory symbols = new string[](length);
+        uint8[] memory decimalsList = new uint8[](length);
+        uint256[] memory balances = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            IERC20Metadata token = IERC20Metadata(tokenList[i]);
+            addresses[i] = tokenList[i];
+            names[i] = token.name();
+            symbols[i] = token.symbol();
+            decimalsList[i] = token.decimals();
+            balances[i] = token.balanceOf(user);
         }
 
-        return (tokenList, balances);
+        return (addresses, names, symbols, decimalsList, balances);
     }
 }
