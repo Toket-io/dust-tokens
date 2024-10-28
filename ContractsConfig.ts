@@ -53,6 +53,6 @@ const arbitrumForkedLocalnetConfig: ZetachainContracts = {
   zeta_ethEthToken: "0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe",
 };
 
-const activeConfig = defaultLocalnetConfig;
+const activeConfig = arbitrumForkedLocalnetConfig;
 
 export default activeConfig;

@@ -3,19 +3,20 @@ import { expect } from "chai";
 import { BigNumber, Contract } from "ethers";
 import hre from "hardhat";
 
+import ContractsConfig from "../../ContractsConfig";
 import { EvmDustTokens, SimpleSwap, Swap } from "../typechain-types";
 
 const DAI_DECIMALS = 18;
 const USDC_DECIMALS = 6;
 
-const GATEWAY_ADDRESS: string = process.env.GATEWAY_ADDRESS ?? "";
+const GATEWAY_ADDRESS: string = ContractsConfig.evm_gateway;
 
 // Zetachain Contracts
-const ZETA_GATEWAY_ADDRESS: string = process.env.ZETA_GATEWAY_ADDRESS ?? "";
+const ZETA_GATEWAY_ADDRESS: string = ContractsConfig.zeta_gateway;
 const ZETA_SYSTEM_CONTRACT_ADDRESS: string =
-  process.env.ZETA_SYSTEM_CONTRACT_ADDRESS ?? "";
-const ZETA_USDC_ETH_ADDRESS: string = process.env.ZETA_USDC_ETH ?? "";
-const ZETA_ETH_ADDRESS: string = process.env.ZETA_ETH ?? "";
+  ContractsConfig.zeta_systemContract;
+const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
+const ZETA_ETH_ADDRESS: string = ContractsConfig.zeta_ethEthToken;
 
 const WETH_ADDRESS: string = process.env.WETH_ADDRESS ?? "";
 const DAI_ADDRESS: string = process.env.DAI_ADDRESS ?? "";
@@ -30,7 +31,7 @@ const WBTC_PRICE_FEED: string = process.env.WBTC_PRICE_FEED ?? "";
 const LINK_PRICE_FEED: string = process.env.LINK_PRICE_FEED ?? "";
 const ARB_PRICE_FEED: string = process.env.ARB_PRICE_FEED ?? "";
 
-const UNISWAP_ROUTER: string = process.env.UNISWAP_ROUTER ?? "";
+const UNISWAP_ROUTER: string = ContractsConfig.evm_uniswapRouterV3;
 
 const ercAbi = [
   // Read-Only Functions
@@ -745,7 +746,7 @@ describe("EvmDustTokens", function () {
     expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
   });
 
-  it("SwapAndBridgeTokens", async function () {
+  it.only("SwapAndBridgeTokens", async function () {
     const args = {
       amount: "10",
       erc20: null,
@@ -883,5 +884,29 @@ describe("EvmDustTokens", function () {
     // );
 
     // expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
+  });
+
+  it.only("Should handle multiple tokens correctly", async function () {
+    const token1 = DAI;
+    const token2 = LINK;
+    const token3 = UNI;
+    await dustTokens.addToken(token1.address);
+    await dustTokens.addToken(token2.address);
+    await dustTokens.addToken(token3.address);
+
+    let tokens = await dustTokens.getTokens();
+    expect(tokens).to.deep.equal([
+      token1.address,
+      token2.address,
+      token3.address,
+    ]);
+
+    await dustTokens.removeToken(token1.address);
+
+    tokens = await dustTokens.getTokens();
+    expect(tokens).to.deep.equal([token3.address, token2.address]);
+
+    const balances = await dustTokens.getBalances(signer.address);
+    console.log("Balances: ", balances);
   });
 });

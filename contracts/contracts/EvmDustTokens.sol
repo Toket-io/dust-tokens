@@ -28,10 +28,14 @@ struct TokenSwap {
 contract EvmDustTokens {
     GatewayEVM public gateway;
     uint256 constant BITCOIN = 18332;
+    address[] private tokenList;
     ISwapRouter public immutable swapRouter;
     address payable public immutable WETH9;
 
     uint24 public constant feeTier = 3000;
+
+    event TokenAdded(address indexed token);
+    event TokenRemoved(address indexed token);
 
     // Define the event to track the swaps and deposits
     event SwappedAndDeposited(
@@ -142,5 +146,41 @@ contract EvmDustTokens {
             performedSwaps,
             totalTokensReceived
         );
+    }
+
+    // Tokens
+    function addToken(address token) public {
+        require(token != address(0), "Invalid token address");
+        tokenList.push(token);
+        emit TokenAdded(token);
+    }
+
+    function removeToken(address token) public {
+        require(token != address(0), "Invalid token address");
+
+        for (uint256 i = 0; i < tokenList.length; i++) {
+            if (tokenList[i] == token) {
+                tokenList[i] = tokenList[tokenList.length - 1];
+                tokenList.pop();
+                emit TokenRemoved(token);
+                break;
+            }
+        }
+    }
+
+    function getTokens() external view returns (address[] memory) {
+        return tokenList;
+    }
+
+    function getBalances(
+        address user
+    ) external view returns (address[] memory, uint256[] memory) {
+        uint256[] memory balances = new uint256[](tokenList.length);
+
+        for (uint256 i = 0; i < tokenList.length; i++) {
+            balances[i] = IERC20(tokenList[i]).balanceOf(user);
+        }
+
+        return (tokenList, balances);
     }
 }
