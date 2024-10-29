@@ -58,6 +58,11 @@ contract EvmDustTokens {
         SwapOutput[] swaps,
         uint256 totalTokensReceived
     );
+    event SwappedAndWithdrawn(
+        address indexed receiver,
+        address outputToken,
+        uint256 totalTokensReceived
+    );
 
     constructor(
         address payable gatewayAddress,
@@ -223,5 +228,34 @@ contract EvmDustTokens {
         payable(receiver).transfer(msg.value);
 
         emit HelloEvent("Hello and transfer on EVM", message);
+    }
+
+    function ReceiveTokens(
+        address outputToken,
+        address receiver
+    ) external payable {
+        // Step 1: Swap msg.value to Wrapped Token (i.e: WETH or WMATIC)
+        IWETH(WETH9).deposit{value: msg.value}();
+
+        // Step 2: Approve swap router to spend WETH
+        TransferHelper.safeApprove(WETH9, address(swapRouter), msg.value);
+
+        // Step 3: Build Uniswap Swap to convert WETH to outputToken
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
+                tokenIn: WETH9,
+                tokenOut: outputToken,
+                fee: feeTier,
+                recipient: receiver, // Swap to this contract
+                deadline: block.timestamp,
+                amountIn: msg.value,
+                amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
+                sqrtPriceLimitX96: 0
+            });
+
+        // Step 4: Perform the swap
+        uint256 amountOut = swapRouter.exactInputSingle(params);
+
+        emit SwappedAndWithdrawn(receiver, outputToken, amountOut);
     }
 }
