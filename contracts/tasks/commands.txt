@@ -15,6 +15,19 @@ npx hardhat hello-withdraw-and-call \
   --amount 1 \
   --types '["string"]' alice
 
+// WITHDRAW ETH with Receiver
+npx hardhat hello-withdraw-and-call \
+  --contract 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --receiver 0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF \
+  --zrc20 0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe \
+  --function "helloAndTransfer(string,address)" \
+  --network localhost \
+  --revert-address 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --revert-message 0x \
+  --call-on-revert \
+  --amount 1 \
+  --types '["string", "address"]' alice 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+
 ------------------------->>>>
 
 // WITHDRAW USDC

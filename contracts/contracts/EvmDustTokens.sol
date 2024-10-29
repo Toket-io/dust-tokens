@@ -215,4 +215,13 @@ contract EvmDustTokens {
     function hello(string memory message) external payable {
         emit HelloEvent("Hello on EVM", message);
     }
+
+    function helloAndTransfer(
+        string memory message,
+        address receiver
+    ) external payable {
+        payable(receiver).transfer(msg.value);
+
+        emit HelloEvent("Hello and transfer on EVM", message);
+    }
 }
