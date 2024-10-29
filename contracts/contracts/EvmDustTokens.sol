@@ -209,4 +209,10 @@ contract EvmDustTokens {
 
         return (addresses, names, symbols, decimalsList, balances);
     }
+
+    event HelloEvent(string, string);
+
+    function hello(string memory message) external payable {
+        emit HelloEvent("Hello on EVM", message);
+    }
 }

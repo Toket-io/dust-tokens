@@ -17,6 +17,9 @@ interface ZetachainContracts {
   zeta_usdcEthToken: `0x${string}`;
   zeta_ethEthToken: `0x${string}`;
   zeta_universalDapp: `0x${string}`;
+
+  // EVM ERC20s
+  evm_weth: `0x${string}` | null;
 }
 
 const defaultLocalnetConfig: ZetachainContracts = {
@@ -26,6 +29,9 @@ const defaultLocalnetConfig: ZetachainContracts = {
   evm_tss: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
   evm_zetaToken: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
   evm_usdcToken: "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
+  evm_uniswapRouterV3: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+  evmDapp: "",
+
   // ZetaChain Side
   zeta_gateway: "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
   zeta_zetaToken: "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
@@ -33,6 +39,10 @@ const defaultLocalnetConfig: ZetachainContracts = {
   zeta_systemContract: "0x610178dA211FEF7D417bC0e6FeD39F05609AD788",
   zeta_usdcEthToken: "0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c",
   zeta_ethEthToken: "0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe",
+  zeta_universalDapp: "",
+
+  // EVM ERC20s
+  evm_weth: null,
 };
 
 const arbitrumForkedLocalnetConfig: ZetachainContracts = {
@@ -43,6 +53,8 @@ const arbitrumForkedLocalnetConfig: ZetachainContracts = {
   evm_zetaToken: "0x748fA28c53a9307BF13ab41164723C133D59fa67",
   evm_usdcToken: "0xCc9f3144F1E57D4E3be528442452912ffcaa7b3c",
   evm_uniswapRouterV3: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+  evmDapp: "0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF",
+
   // ZetaChain Side
   zeta_gateway: "0x03701C609EA55bfE68AD06fc36760Cb25317eDBa",
   zeta_zetaToken: "0x9Bda88dA960e08Cc166D3e824109b5af3E376278",
@@ -51,6 +63,10 @@ const arbitrumForkedLocalnetConfig: ZetachainContracts = {
   zeta_uniswapRouterV2: "0x62153519C210d21f1B67dE11Cf60d6F467190707",
   zeta_usdcEthToken: "0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c",
   zeta_ethEthToken: "0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe",
+  zeta_universalDapp: "0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2",
+
+  // EVM ERC20s
+  evm_weth: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
 };
 
 const activeConfig = arbitrumForkedLocalnetConfig;
