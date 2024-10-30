@@ -33,6 +33,7 @@ import ContractsConfig from "../../../ContractsConfig";
 
 const universalAppAddress = ContractsConfig.zeta_universalDapp;
 const hardhatAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const receiverAccount = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
 const localhostProvider = new ethers.providers.JsonRpcProvider(
   "http://localhost:8545"
 );
@@ -334,6 +335,20 @@ const Page = () => {
               contractAddress={evmAddresses.usdc}
               account={hardhatAccount}
             />
+            <Erc20Balance
+              contractAddress={"0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0"}
+              account={hardhatAccount}
+            />
+            <h1 className="text-3xl font-bold mt-6">Receiver</h1>
+            <Erc20Balance account={receiverAccount} />
+            <Erc20Balance
+              contractAddress={evmAddresses.usdc}
+              account={receiverAccount}
+            />
+            <Erc20Balance
+              contractAddress={"0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0"}
+              account={receiverAccount}
+            />
 
             <h1 className="text-3xl font-bold mt-6">Gateway</h1>
             <Erc20Balance account={evmAddresses.gateway} />
@@ -386,6 +401,10 @@ const Page = () => {
             />
             <Erc20Balance
               contractAddress={zetaAddresses.usdc}
+              account={hardhatAccount}
+            />
+            <Erc20Balance
+              contractAddress={ContractsConfig.zeta_zetaToken}
               account={hardhatAccount}
             />
 

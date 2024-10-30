@@ -3,6 +3,7 @@ import "./tasks/swap";
 import "./tasks/balance";
 import "./tasks/helloCall";
 import "./tasks/helloWithdrawAndCall";
+import "./tasks/debugEvent";
 import "@zetachain/localnet/tasks";
 import "@nomicfoundation/hardhat-toolbox";
 import "@zetachain/toolkit/tasks";

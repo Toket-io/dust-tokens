@@ -29,6 +29,7 @@ npx hardhat hello-withdraw-and-call \
   --types '["string", "address"]' alice 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 
 
+// WITHDRAW and swap
 npx hardhat hello-withdraw-and-call \
   --contract 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
   --receiver 0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF \
@@ -66,3 +67,14 @@ npx hardhat hello-call \
   --network localhost \
   --types '["string"]' alice
 
+------------------------->>>>
+
+
+
+npx hardhat debug-event \
+  --network localhost \
+  --tx 0x79f0a23202edcc80f06152200448446994bfaf634a2bfdd2b67654370360ebe9
+
+npx hardhat debug-event-evm \
+  --network localhost \
+  --tx 0xc4083e47084b805b0553c526b39c873eb816b1ea14b53d58d8bccff43ba883cf

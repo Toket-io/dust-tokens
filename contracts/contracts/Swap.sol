@@ -24,6 +24,7 @@ contract Swap is UniversalContract {
     struct Params {
         address target;
         bytes to;
+        bytes destinationPayload;
     }
 
     function onCrossChainCall(
@@ -32,29 +33,51 @@ contract Swap is UniversalContract {
         uint256 amount,
         bytes calldata message
     ) external override {
-        Params memory params = Params({target: address(0), to: bytes("")});
+        Params memory params = Params({
+            target: address(0),
+            to: bytes(""),
+            destinationPayload: bytes("")
+        });
         if (context.chainID == BITCOIN) {
             params.target = BytesHelperLib.bytesToAddress(message, 0);
             params.to = abi.encodePacked(
                 BytesHelperLib.bytesToAddress(message, 20)
             );
         } else {
-            (address targetToken, bytes memory recipient) = abi.decode(
-                message,
-                (address, bytes)
-            );
+            (
+                address targetToken,
+                bytes memory recipient,
+                bytes memory destinationPayload
+            ) = abi.decode(message, (address, bytes, bytes));
             params.target = targetToken;
             params.to = recipient;
+            params.destinationPayload = destinationPayload;
         }
 
-        swapAndWithdraw(zrc20, amount, params.target, params.to);
+        swapAndWithdraw(
+            zrc20,
+            amount,
+            params.target,
+            params.to,
+            params.destinationPayload
+        );
     }
+
+    event Debug(
+        bytes recipient,
+        uint256 outputAmount,
+        address outputToken,
+        address gasZRC20,
+        uint256 gasFee,
+        bytes payload
+    );
 
     function swapAndWithdraw(
         address inputToken,
         uint256 amount,
         address targetToken,
-        bytes memory recipient
+        bytes memory recipient,
+        bytes memory payload
     ) internal {
         uint256 inputForGas;
         address gasZRC20;
@@ -76,13 +99,21 @@ contract Swap is UniversalContract {
             swapAmount = amount - inputForGas;
         }
 
-        uint256 outputAmount = SwapHelperLib.swapExactTokensForTokens(
-            systemContract,
-            inputToken,
-            swapAmount,
-            targetToken,
-            0
-        );
+        // Only perform the swap if output token is not the same as input token
+
+        uint256 outputAmount;
+
+        if (inputToken != targetToken) {
+            outputAmount = SwapHelperLib.swapExactTokensForTokens(
+                systemContract,
+                inputToken,
+                swapAmount,
+                targetToken,
+                0
+            );
+        } else {
+            outputAmount = swapAmount;
+        }
 
         if (gasZRC20 == targetToken) {
             IZRC20(gasZRC20).approve(address(gateway), outputAmount + gasFee);
@@ -91,17 +122,37 @@ contract Swap is UniversalContract {
             IZRC20(targetToken).approve(address(gateway), outputAmount);
         }
 
-        gateway.withdraw(
+        RevertOptions memory revertOptions = RevertOptions({
+            revertAddress: address(0),
+            callOnRevert: false,
+            abortAddress: address(0),
+            revertMessage: "",
+            onRevertGasLimit: 0
+        });
+
+        uint256 gasLimit = 7000000; // TODO: set correct gas limit
+
+        emit Debug(
             recipient,
             outputAmount,
             targetToken,
-            RevertOptions({
-                revertAddress: address(0),
-                callOnRevert: false,
-                abortAddress: address(0),
-                revertMessage: "",
-                onRevertGasLimit: 0
-            })
+            gasZRC20,
+            gasFee,
+            payload
+        );
+
+        require(
+            IZRC20(gasZRC20).approve(address(gateway), type(uint256).max),
+            "Approval failed"
+        );
+
+        gateway.withdrawAndCall(
+            recipient,
+            outputAmount,
+            targetToken,
+            payload,
+            gasLimit,
+            revertOptions
         );
     }
 

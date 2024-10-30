@@ -158,13 +158,14 @@ contract EvmDustTokens {
         );
     }
 
-    // Tokens
+    // Tokens TODO: Add owner modifier
     function addToken(address token) public {
         require(token != address(0), "Invalid token address");
         tokenList.push(token);
         emit TokenAdded(token);
     }
 
+    // Tokens TODO: Add owner modifier
     function removeToken(address token) public {
         require(token != address(0), "Invalid token address");
 
@@ -217,10 +218,6 @@ contract EvmDustTokens {
 
     event HelloEvent(string, string);
 
-    function hello(string memory message) external payable {
-        emit HelloEvent("Hello on EVM", message);
-    }
-
     function helloAndTransfer(
         string memory message,
         address receiver
@@ -230,10 +227,19 @@ contract EvmDustTokens {
         emit HelloEvent("Hello and transfer on EVM", message);
     }
 
+    event DebugReceiveTokens(address, address, uint256);
+
     function ReceiveTokens(
         address outputToken,
         address receiver
     ) external payable {
+        // TODO: add logic to avoid unnecessary swaps if the token is already WETH
+        // TODO: Check that value is not zero
+
+        emit DebugReceiveTokens(outputToken, receiver, msg.value);
+
+        require(msg.value > 0, "No value provided");
+
         // Step 1: Swap msg.value to Wrapped Token (i.e: WETH or WMATIC)
         IWETH(WETH9).deposit{value: msg.value}();
 
