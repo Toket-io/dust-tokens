@@ -234,8 +234,6 @@ contract EvmDustTokens {
         address receiver
     ) external payable {
         // TODO: add logic to avoid unnecessary swaps if the token is already WETH
-        // TODO: Check that value is not zero
-
         emit DebugReceiveTokens(outputToken, receiver, msg.value);
 
         require(msg.value > 0, "No value provided");

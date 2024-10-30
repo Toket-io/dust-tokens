@@ -65,8 +65,10 @@ contract Swap is UniversalContract {
 
     event Debug(
         bytes recipient,
-        uint256 outputAmount,
-        address outputToken,
+        address inputToken,
+        uint256 amount,
+        address targetToken,
+        uint256 targetAmount,
         address gasZRC20,
         uint256 gasFee,
         bytes payload
@@ -84,8 +86,14 @@ contract Swap is UniversalContract {
         uint256 gasFee;
         uint256 swapAmount;
 
-        (gasZRC20, gasFee) = IZRC20(targetToken).withdrawGasFee();
+        uint256 gasLimit = 7000000; // TODO: set correct gas limit
 
+        // Get the gas fee required for withdrawal and call
+        (gasZRC20, gasFee) = IZRC20(targetToken).withdrawGasFeeWithGasLimit(
+            gasLimit
+        );
+
+        // Calculate the amount left after covering gas fees
         if (gasZRC20 == inputToken) {
             swapAmount = amount - gasFee;
         } else {
@@ -99,10 +107,8 @@ contract Swap is UniversalContract {
             swapAmount = amount - inputForGas;
         }
 
-        // Only perform the swap if output token is not the same as input token
-
+        // Perform the token swap if the input and target tokens are different
         uint256 outputAmount;
-
         if (inputToken != targetToken) {
             outputAmount = SwapHelperLib.swapExactTokensForTokens(
                 systemContract,
@@ -115,6 +121,7 @@ contract Swap is UniversalContract {
             outputAmount = swapAmount;
         }
 
+        // Approve the gateway to spend the tokens
         if (gasZRC20 == targetToken) {
             IZRC20(gasZRC20).approve(address(gateway), outputAmount + gasFee);
         } else {
@@ -122,6 +129,7 @@ contract Swap is UniversalContract {
             IZRC20(targetToken).approve(address(gateway), outputAmount);
         }
 
+        // Prepare the revert options
         RevertOptions memory revertOptions = RevertOptions({
             revertAddress: address(0),
             callOnRevert: false,
@@ -130,22 +138,19 @@ contract Swap is UniversalContract {
             onRevertGasLimit: 0
         });
 
-        uint256 gasLimit = 7000000; // TODO: set correct gas limit
-
+        // Emit a debug event for monitoring
         emit Debug(
             recipient,
-            outputAmount,
+            inputToken,
+            amount,
             targetToken,
+            outputAmount,
             gasZRC20,
             gasFee,
             payload
         );
 
-        require(
-            IZRC20(gasZRC20).approve(address(gateway), type(uint256).max),
-            "Approval failed"
-        );
-
+        // Execute the withdrawal and call operation via the gateway
         gateway.withdrawAndCall(
             recipient,
             outputAmount,

@@ -3,7 +3,7 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 
 const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
   const network = hre.network.name;
-  const { tx, event } = args;
+  const { tx } = args;
 
   try {
     // Get the transaction receipt
@@ -21,10 +21,8 @@ const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
       contractArtifact.abi
     );
 
-    // Get the event signature
-    const eventSignature = contractInterface.getEventTopic(
-      "Debug(bytes recipient, uint256 outputAmount, address outputToken, address gasZRC20, uint256 gasFee, bytes payload)"
-    );
+    const event = contractInterface.getEvent("Debug");
+    const eventSignature = contractInterface.getEventTopic(event);
 
     // Filter logs for the given event
     const eventLogs = receipt.logs.filter(
@@ -75,9 +73,8 @@ const mainEvm = async (args: any, hre: HardhatRuntimeEnvironment) => {
     );
 
     // Get the event signature
-    const eventSignature = contractInterface.getEventTopic(
-      "DebugReceiveTokens(address, address, uint256);"
-    );
+    const event = contractInterface.getEvent("DebugReceiveTokens");
+    const eventSignature = contractInterface.getEventTopic(event);
 
     // Filter logs for the given event
     const eventLogs = receipt.logs.filter(
