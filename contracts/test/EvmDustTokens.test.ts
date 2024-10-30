@@ -25,12 +25,6 @@ const UNI_ADDRESS = process.env.UNI_ADDRESS ?? "";
 const LINK_ADDRESS: string = process.env.LINK_ADDRESS ?? "";
 const WBTC_ADDRESS: string = process.env.WBTC_ADDRESS ?? "";
 
-const WETH_PRICE_FEED: string = process.env.WETH_PRICE_FEED ?? "";
-const DAI_PRICE_FEED: string = process.env.DAI_PRICE_FEED ?? "";
-const WBTC_PRICE_FEED: string = process.env.WBTC_PRICE_FEED ?? "";
-const LINK_PRICE_FEED: string = process.env.LINK_PRICE_FEED ?? "";
-const ARB_PRICE_FEED: string = process.env.ARB_PRICE_FEED ?? "";
-
 const UNISWAP_ROUTER: string = ContractsConfig.evm_uniswapRouterV3;
 
 const ercAbi = [
@@ -45,6 +39,11 @@ const ercAbi = [
   "function approve(address spender, uint256 amount) returns (bool)",
   "function withdraw(uint256 wad) external",
 ];
+
+type TokenSwap = {
+  amount: BigNumber;
+  token: string;
+};
 
 describe("EvmDustTokens", function () {
   let signer: SignerWithAddress;
@@ -118,6 +117,23 @@ describe("EvmDustTokens", function () {
     );
 
     return encodedParameters;
+  };
+
+  const approveTokens = async (tokenSwaps: TokenSwap[]) => {
+    for (const swap of tokenSwaps) {
+      const contract = new hre.ethers.Contract(swap.token, ercAbi, signer);
+      const approveTx = await contract.approve(dustTokens.address, swap.amount);
+      await approveTx.wait();
+
+      const tokenName = await contract.name();
+      const tokenDecimals = await contract.decimals();
+      const formattedAmount = hre.ethers.utils.formatUnits(
+        swap.amount,
+        tokenDecimals
+      );
+
+      console.log(`${tokenName} approved ${formattedAmount}`);
+    }
   };
 
   // MARK: Setup
@@ -249,10 +265,13 @@ describe("EvmDustTokens", function () {
   });
 
   it.only("SwapAndBridgeTokens", async function () {
+    // Step 0: Output token
+    const outputTokenContract = UNI;
+
     // Step 1: Create destination chain payload
     const destinationPayload = encodeDestinationPayload(
       receiver.address,
-      UNI.address
+      outputTokenContract.address
     );
 
     // Step 2: Create Zetachain payload
@@ -263,44 +282,30 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 3: Create input token swaps
-
-    // Tokens lists
-    // ERC-20 Contracts to be swapped, with their names
-    const ercContracts = [
-      { amount: "100", contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
-      { amount: "1", contract: LINK, decimals: DAI_DECIMALS, name: "LINK" },
-      { amount: "6", contract: UNI, decimals: DAI_DECIMALS, name: "UNI" },
+    const swaps: TokenSwap[] = [
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: DAI.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: LINK.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: UNI.address,
+      },
     ];
 
-    // Approve the MultiSwap contract to spend tokens
-    for (const { amount, name, contract, decimals } of ercContracts) {
-      const formattedAmount = hre.ethers.utils.parseUnits(amount, decimals);
+    // Step 4: Approve tokens
+    await approveTokens(swaps);
 
-      const approveTx = await contract.approve(
-        dustTokens.address,
-        formattedAmount
-      );
-      await approveTx.wait();
-
-      console.log(`${name} approved for MultiSwap`);
-    }
-
-    // Execute the swap
-    type TokenSwap = {
-      amount: BigNumber;
-      token: string;
-    };
-    const tokenSwaps: TokenSwap[] = ercContracts.map(
-      ({ amount, decimals, contract }) => {
-        const formattedAmount = hre.ethers.utils.parseUnits(amount, decimals);
-        const token: TokenSwap = {
-          amount: formattedAmount,
-          token: contract.address,
-        };
-        return token;
-      }
+    // Step 5: Save the start balance of the receiver
+    const receiverStartBalance = await outputTokenContract.balanceOf(
+      receiver.address
     );
 
+    // Step 6: Execute SwapAndBridgeTokens
     const revertOptions = {
       abortAddress: "0x0000000000000000000000000000000000000000", // not used
       callOnRevert: false,
@@ -312,14 +317,14 @@ describe("EvmDustTokens", function () {
     };
 
     const tx = await dustTokens.SwapAndBridgeTokens(
-      tokenSwaps,
+      swaps,
       universalApp.address,
       encodedParameters,
       revertOptions
     );
     const receipt = await tx.wait();
 
-    // Check that the receipt includes the event SwappedAndDeposited
+    // Step 7: Check that the receipt includes the event SwappedAndDeposited
     const depositEvent = receipt.events?.find(
       (e) => e.event === "SwappedAndDeposited"
     );
@@ -327,37 +332,15 @@ describe("EvmDustTokens", function () {
     expect(tx).not.reverted;
     expect(depositEvent).exist;
 
-    const totalTokensDeposited = hre.ethers.utils.formatEther(event?.args[2]);
-    console.log("Swap Event: ", totalTokensDeposited);
+    // Wait for 5 second
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
-    // // Wait for 1 second
-    // await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // // Check if USDC balance has increased
-    // const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
-    // const UsdcBalanceAfter = Number(
-    //   hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
-    // );
-    // const UsdcBalanceBefore = startBalances["usdc"];
-    // const UsdcDiff = UsdcBalanceAfter - UsdcBalanceBefore;
-
-    // console.log(
-    //   `USDC balance - Before: ${UsdcBalanceBefore}, After: ${UsdcBalanceAfter}, Diff: ${UsdcDiff}`
-    // );
-
-    // expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
-
-    // Check native eth balance
-    const expandedNativeEthBalanceAfter = await signer.getBalance();
-    const nativeEthBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedNativeEthBalanceAfter, DAI_DECIMALS)
+    // Step 8: Check the receiver's balance for the output token
+    const receiverBalance = await outputTokenContract.balanceOf(
+      receiver.address
     );
-    const nativeEthBalanceBefore = startBalances["nativeEth"];
-    const nativeEthDiff = nativeEthBalanceAfter - nativeEthBalanceBefore;
 
-    console.log(
-      `Native ETH balance - Before: ${nativeEthBalanceBefore}, After: ${nativeEthBalanceAfter}, Diff: ${nativeEthDiff}`
-    );
+    expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
   });
 
   it("Should handle multiple tokens and balances", async function () {
