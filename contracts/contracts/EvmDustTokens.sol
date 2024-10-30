@@ -216,26 +216,11 @@ contract EvmDustTokens {
         return (addresses, names, symbols, decimalsList, balances);
     }
 
-    event HelloEvent(string, string);
-
-    function helloAndTransfer(
-        string memory message,
-        address receiver
-    ) external payable {
-        payable(receiver).transfer(msg.value);
-
-        emit HelloEvent("Hello and transfer on EVM", message);
-    }
-
-    event DebugReceiveTokens(address, address, uint256);
-
     function ReceiveTokens(
         address outputToken,
         address receiver
     ) external payable {
         // TODO: add logic to avoid unnecessary swaps if the token is already WETH
-        emit DebugReceiveTokens(outputToken, receiver, msg.value);
-
         require(msg.value > 0, "No value provided");
 
         // Step 1: Swap msg.value to Wrapped Token (i.e: WETH or WMATIC)

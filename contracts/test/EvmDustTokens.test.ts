@@ -66,6 +66,61 @@ describe("EvmDustTokens", function () {
   let ZETA_USDC_ETH: Contract;
   let ZETA_ETH: Contract;
 
+  // MARK: Helper Functions
+  const encodeDestinationPayload = (
+    recipient: string,
+    outputToken: string
+  ): string => {
+    const destinationPayloadTypes = ["address", "address"];
+    const destinationFunctionParams = hre.ethers.utils.defaultAbiCoder.encode(
+      destinationPayloadTypes,
+      [outputToken, recipient]
+    );
+
+    const functionName = "ReceiveTokens(address,address)";
+    const functionSignature = hre.ethers.utils.id(functionName).slice(0, 10);
+    const destinationPayload = hre.ethers.utils.hexlify(
+      hre.ethers.utils.concat([functionSignature, destinationFunctionParams])
+    );
+
+    return destinationPayload;
+  };
+
+  const encodeZetachainPayload = (
+    outputChainToken: string,
+    destinationContract: string,
+    destinationPayload: string
+  ) => {
+    const args = {
+      types: ["address", "bytes", "bytes"],
+      values: [outputChainToken, destinationContract, destinationPayload],
+    };
+
+    // Prepare encoded parameters for the call
+    const valuesArray = args.values.map((value, index) => {
+      const type = args.types[index];
+      if (type === "bool") {
+        try {
+          return JSON.parse(value.toLowerCase());
+        } catch (e) {
+          throw new Error(`Invalid boolean value: ${value}`);
+        }
+      } else if (type.startsWith("uint") || type.startsWith("int")) {
+        return hre.ethers.BigNumber.from(value);
+      } else {
+        return value;
+      }
+    });
+
+    const encodedParameters = hre.ethers.utils.defaultAbiCoder.encode(
+      args.types,
+      valuesArray
+    );
+
+    return encodedParameters;
+  };
+
+  // MARK: Setup
   this.beforeAll(async function () {
     // Save Signer
     let signers = await hre.ethers.getSigners();
@@ -185,6 +240,7 @@ describe("EvmDustTokens", function () {
     startBalances = formattedBalances;
   });
 
+  // MARK: Tests
   it("Test balance of UNI", async function () {
     const balance = await UNI.balanceOf(signer.address);
     const formatedBalance = hre.ethers.utils.formatUnits(balance, DAI_DECIMALS);
@@ -193,69 +249,27 @@ describe("EvmDustTokens", function () {
   });
 
   it.only("SwapAndBridgeTokens", async function () {
-    const destinationPayloadTypes = ["address", "address"];
-    const destinationOutputToken = UNI.address;
-    const destinationRecipient = receiver.address;
-    const destinationFunctionParams = hre.ethers.utils.defaultAbiCoder.encode(
-      destinationPayloadTypes,
-      [destinationOutputToken, destinationRecipient]
+    // Step 1: Create destination chain payload
+    const destinationPayload = encodeDestinationPayload(
+      receiver.address,
+      UNI.address
     );
 
-    const functionName = "ReceiveTokens(address,address)";
-    const functionSignature = hre.ethers.utils.id(functionName).slice(0, 10);
-    const destinationPayload = hre.ethers.utils.hexlify(
-      hre.ethers.utils.concat([functionSignature, destinationFunctionParams])
+    // Step 2: Create Zetachain payload
+    const encodedParameters = encodeZetachainPayload(
+      ZETA_ETH_ADDRESS,
+      dustTokens.address,
+      destinationPayload
     );
 
-    const args = {
-      revertOptions: {
-        callOnRevert: false,
-        onRevertGasLimit: 7000000,
-        revertAddress: "0x0000000000000000000000000000000000000000",
-        revertMessage: "0x",
-      },
-      types: ["address", "bytes", "bytes"],
-      values: [ZETA_ETH_ADDRESS, dustTokens.address, destinationPayload],
-    };
-
-    const revertOptions = {
-      abortAddress: "0x0000000000000000000000000000000000000000", // not used
-      callOnRevert: args.revertOptions.callOnRevert,
-      onRevertGasLimit: args.revertOptions.onRevertGasLimit,
-      revertAddress: args.revertOptions.revertAddress,
-      revertMessage: hre.ethers.utils.hexlify(
-        hre.ethers.utils.toUtf8Bytes(args.revertOptions.revertMessage)
-      ),
-    };
-
-    // Prepare encoded parameters for the call
-    const valuesArray = args.values.map((value, index) => {
-      const type = args.types[index];
-      if (type === "bool") {
-        try {
-          return JSON.parse(value.toLowerCase());
-        } catch (e) {
-          throw new Error(`Invalid boolean value: ${value}`);
-        }
-      } else if (type.startsWith("uint") || type.startsWith("int")) {
-        return hre.ethers.BigNumber.from(value);
-      } else {
-        return value;
-      }
-    });
-
-    const encodedParameters = hre.ethers.utils.defaultAbiCoder.encode(
-      args.types,
-      valuesArray
-    );
+    // Step 3: Create input token swaps
 
     // Tokens lists
     // ERC-20 Contracts to be swapped, with their names
     const ercContracts = [
       { amount: "100", contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
-      { amount: "1", contract: LINK, decimals: DAI_DECIMALS, name: "LINK" }, // Assuming LINK uses the same decimals as DAI
-      { amount: "6", contract: UNI, decimals: DAI_DECIMALS, name: "UNI" }, // Assuming LINK uses the same decimals as DAI
-      //   { contract: WBTC, decimals: DAI_DECIMALS, name: "WBTC" }, // Assuming LINK uses the same decimals as DAI
+      { amount: "1", contract: LINK, decimals: DAI_DECIMALS, name: "LINK" },
+      { amount: "6", contract: UNI, decimals: DAI_DECIMALS, name: "UNI" },
     ];
 
     // Approve the MultiSwap contract to spend tokens
@@ -269,15 +283,6 @@ describe("EvmDustTokens", function () {
       await approveTx.wait();
 
       console.log(`${name} approved for MultiSwap`);
-    }
-
-    // Check Initial Balances
-    const beforeBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      beforeBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
     }
 
     // Execute the swap
@@ -296,7 +301,15 @@ describe("EvmDustTokens", function () {
       }
     );
 
-    // console.log("Token Swaps:", tokenSwaps);
+    const revertOptions = {
+      abortAddress: "0x0000000000000000000000000000000000000000", // not used
+      callOnRevert: false,
+      onRevertGasLimit: 7000000,
+      revertAddress: "0x0000000000000000000000000000000000000000",
+      revertMessage: hre.ethers.utils.hexlify(
+        hre.ethers.utils.toUtf8Bytes("0x")
+      ),
+    };
 
     const tx = await dustTokens.SwapAndBridgeTokens(
       tokenSwaps,
@@ -307,12 +320,12 @@ describe("EvmDustTokens", function () {
     const receipt = await tx.wait();
 
     // Check that the receipt includes the event SwappedAndDeposited
-    const event = receipt.events?.find(
+    const depositEvent = receipt.events?.find(
       (e) => e.event === "SwappedAndDeposited"
     );
 
     expect(tx).not.reverted;
-    expect(event).exist;
+    expect(depositEvent).exist;
 
     const totalTokensDeposited = hre.ethers.utils.formatEther(event?.args[2]);
     console.log("Swap Event: ", totalTokensDeposited);
