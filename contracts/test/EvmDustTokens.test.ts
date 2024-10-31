@@ -155,6 +155,7 @@ describe("EvmDustTokens", function () {
     const simpleSwapFactory = await hre.ethers.getContractFactory("SimpleSwap");
     simpleSwap = await simpleSwapFactory.deploy(UNISWAP_ROUTER, WETH_ADDRESS);
     await simpleSwap.deployed();
+    console.log("SimpleSwap deployed to:", simpleSwap.address);
 
     // Deploy the DustTokens contract
     const evmDustTokensFactory = await hre.ethers.getContractFactory(
@@ -163,7 +164,8 @@ describe("EvmDustTokens", function () {
     dustTokens = await evmDustTokensFactory.deploy(
       GATEWAY_ADDRESS,
       UNISWAP_ROUTER,
-      WETH_ADDRESS
+      WETH.address,
+      signer.address
     );
     await dustTokens.deployed();
     console.log("DustTokens deployed to:", dustTokens.address);
