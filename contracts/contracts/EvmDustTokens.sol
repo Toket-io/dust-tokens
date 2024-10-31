@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 
@@ -43,7 +44,7 @@ struct SwapOutput {
     uint256 amountOut;
 }
 
-contract EvmDustTokens {
+contract EvmDustTokens is Ownable {
     GatewayEVM public gateway;
     uint256 constant BITCOIN = 18332;
     address[] private tokenList;
@@ -67,11 +68,15 @@ contract EvmDustTokens {
     constructor(
         address payable gatewayAddress,
         ISwapRouter _swapRouter,
-        address payable _WETH9
-    ) {
+        address payable _WETH9,
+        address initialOwner
+    ) Ownable() {
         gateway = GatewayEVM(gatewayAddress);
         swapRouter = _swapRouter;
         WETH9 = _WETH9;
+
+        // Transfer ownership to the initialOwner
+        transferOwnership(initialOwner);
     }
 
     receive() external payable {}
