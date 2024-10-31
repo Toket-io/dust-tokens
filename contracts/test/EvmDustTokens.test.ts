@@ -417,13 +417,32 @@ describe("EvmDustTokens", function () {
     await dustTokens.addToken(LINK.address);
     await dustTokens.addToken(UNI.address);
 
+    const isDaiWhiteListed = await dustTokens.isTokenWhitelisted(DAI.address);
+    const isLinkWhiteListed = await dustTokens.isTokenWhitelisted(LINK.address);
+    const isUniWhiteListed = await dustTokens.isTokenWhitelisted(UNI.address);
+
+    expect(isDaiWhiteListed).to.be.true;
+    expect(isLinkWhiteListed).to.be.true;
+    expect(isUniWhiteListed).to.be.true;
+
     let tokens = await dustTokens.getTokens();
     expect(tokens).to.deep.equal([DAI.address, LINK.address, UNI.address]);
 
     await dustTokens.removeToken(DAI.address);
 
-    tokens = await dustTokens.getTokens();
-    expect(tokens).to.deep.equal([UNI.address, LINK.address]);
+    const isDaiWhiteListedAfter = await dustTokens.isTokenWhitelisted(
+      DAI.address
+    );
+    const isLinkWhiteListedAfter = await dustTokens.isTokenWhitelisted(
+      LINK.address
+    );
+    const isUniWhiteListedAfter = await dustTokens.isTokenWhitelisted(
+      UNI.address
+    );
+
+    expect(isDaiWhiteListedAfter).to.be.false;
+    expect(isLinkWhiteListedAfter).to.be.true;
+    expect(isUniWhiteListedAfter).to.be.true;
 
     const balances = await dustTokens.getBalances(signer.address);
     expect(balances).to.deep.equal([

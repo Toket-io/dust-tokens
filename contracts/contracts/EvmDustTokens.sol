@@ -17,12 +17,10 @@ interface IWETH is IERC20 {
     function deposit() external payable;
 
     function withdraw(uint256 amount) external;
-
-    function withdrawTo(address account, uint256 amount) external;
 }
 
 // Custom ERC20 Interface with optional metadata functions
-interface IERC20Metadata {
+interface IERC20Metadata is IERC20 {
     function name() external view returns (string memory);
 
     function symbol() external view returns (string memory);
@@ -47,7 +45,8 @@ struct SwapOutput {
 contract EvmDustTokens is Ownable {
     GatewayEVM public gateway;
     uint256 constant BITCOIN = 18332;
-    address[] private tokenList;
+    mapping(address => bool) public whitelistedTokens;
+    address[] public tokenList;
     ISwapRouter public immutable swapRouter;
     address payable public immutable WETH9;
     uint24 public constant feeTier = 3000;
@@ -70,13 +69,10 @@ contract EvmDustTokens is Ownable {
         ISwapRouter _swapRouter,
         address payable _WETH9,
         address initialOwner
-    ) Ownable() {
+    ) Ownable(initialOwner) {
         gateway = GatewayEVM(gatewayAddress);
         swapRouter = _swapRouter;
         WETH9 = _WETH9;
-
-        // Transfer ownership to the initialOwner
-        transferOwnership(initialOwner);
     }
 
     receive() external payable {}
@@ -100,6 +96,11 @@ contract EvmDustTokens is Ownable {
             SwapInput memory swap = swaps[i];
             address token = swap.token;
             uint256 amount = swap.amount;
+
+            require(
+                whitelistedTokens[outputToken],
+                "Output token not whitelisted"
+            );
 
             // Check allowance and balance
             uint256 allowance = IERC20(token).allowance(
@@ -163,29 +164,39 @@ contract EvmDustTokens is Ownable {
         );
     }
 
-    // Tokens TODO: Add owner modifier
-    function addToken(address token) public {
+    // Add token to whitelist
+    function addToken(address token) public onlyOwner {
         require(token != address(0), "Invalid token address");
+        require(!whitelistedTokens[token], "Token already whitelisted");
+        whitelistedTokens[token] = true;
         tokenList.push(token);
         emit TokenAdded(token);
     }
 
-    // Tokens TODO: Add owner modifier
-    function removeToken(address token) public {
+    // Remove token from whitelist
+    function removeToken(address token) public onlyOwner {
         require(token != address(0), "Invalid token address");
+        require(whitelistedTokens[token], "Token not whitelisted");
+        whitelistedTokens[token] = false;
 
+        // Remove token from the tokenList
         for (uint256 i = 0; i < tokenList.length; i++) {
             if (tokenList[i] == token) {
                 tokenList[i] = tokenList[tokenList.length - 1];
                 tokenList.pop();
-                emit TokenRemoved(token);
                 break;
             }
         }
+        emit TokenRemoved(token);
     }
 
     function getTokens() external view returns (address[] memory) {
         return tokenList;
+    }
+
+    // Check if a token is whitelisted
+    function isTokenWhitelisted(address token) external view returns (bool) {
+        return whitelistedTokens[token];
     }
 
     function getBalances(
@@ -194,31 +205,31 @@ contract EvmDustTokens is Ownable {
         external
         view
         returns (
-            address[] memory,
-            string[] memory,
-            string[] memory,
-            uint8[] memory,
-            uint256[] memory
+            address[] memory addresses,
+            string[] memory names,
+            string[] memory symbols,
+            uint8[] memory decimalsArray,
+            uint256[] memory balances
         )
     {
-        uint256 length = tokenList.length;
+        uint256 tokenCount = tokenList.length;
 
-        address[] memory addresses = new address[](length);
-        string[] memory names = new string[](length);
-        string[] memory symbols = new string[](length);
-        uint8[] memory decimalsList = new uint8[](length);
-        uint256[] memory balances = new uint256[](length);
+        addresses = new address[](tokenCount);
+        names = new string[](tokenCount);
+        symbols = new string[](tokenCount);
+        decimalsArray = new uint8[](tokenCount);
+        balances = new uint256[](tokenCount);
 
-        for (uint256 i = 0; i < length; i++) {
-            IERC20Metadata token = IERC20Metadata(tokenList[i]);
-            addresses[i] = tokenList[i];
-            names[i] = token.name();
-            symbols[i] = token.symbol();
-            decimalsList[i] = token.decimals();
-            balances[i] = token.balanceOf(user);
+        for (uint256 i = 0; i < tokenCount; i++) {
+            if (whitelistedTokens[tokenList[i]]) {
+                IERC20Metadata token = IERC20Metadata(tokenList[i]);
+                addresses[i] = tokenList[i];
+                names[i] = token.name();
+                symbols[i] = token.symbol();
+                decimalsArray[i] = token.decimals();
+                balances[i] = token.balanceOf(user);
+            }
         }
-
-        return (addresses, names, symbols, decimalsList, balances);
     }
 
     function ReceiveTokens(
@@ -226,6 +237,12 @@ contract EvmDustTokens is Ownable {
         address receiver
     ) external payable {
         require(msg.value > 0, "No value provided");
+
+        // Check if the output token is whitelisted
+        require(
+            outputToken == address(0) || whitelistedTokens[outputToken],
+            "Output token not whitelisted"
+        );
 
         // If outputToken is 0x, send msg.value to the receiver
         if (outputToken == address(0)) {
