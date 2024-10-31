@@ -48,6 +48,7 @@ type TokenSwap = {
 describe("EvmDustTokens", function () {
   let signer: SignerWithAddress;
   let receiver: SignerWithAddress;
+  let notOwner: SignerWithAddress;
 
   // EVM side Contracts
   let simpleSwap: SimpleSwap;
@@ -144,6 +145,11 @@ describe("EvmDustTokens", function () {
 
     receiver = signers[2];
 
+    notOwner = signers[3];
+
+    console.log("Signer Address:", signer.address);
+    console.log("Receiver Address:", receiver.address);
+    console.log("Not Owner Address:", notOwner.address);
 
     // Deploy the SimpleSwap contract
     const simpleSwapFactory = await hre.ethers.getContractFactory("SimpleSwap");
@@ -162,6 +168,12 @@ describe("EvmDustTokens", function () {
     await dustTokens.deployed();
     console.log("DustTokens deployed to:", dustTokens.address);
 
+    // Configure initial whitelisted tokens
+    await dustTokens.addToken(DAI_ADDRESS);
+    await dustTokens.addToken(LINK_ADDRESS);
+    await dustTokens.addToken(UNI_ADDRESS);
+    await dustTokens.addToken(WBTC_ADDRESS);
+
     // Connect to ERC20s
     WETH = new hre.ethers.Contract(WETH_ADDRESS, ercAbi, signer);
     DAI = new hre.ethers.Contract(DAI_ADDRESS, ercAbi, signer);
@@ -170,7 +182,6 @@ describe("EvmDustTokens", function () {
     UNI = new hre.ethers.Contract(UNI_ADDRESS, ercAbi, signer);
     WBTC = new hre.ethers.Contract(WBTC_ADDRESS, ercAbi, signer);
 
-    // Connect to ZetaChain contracts
     // Deploy the Universal App contract
     const universalAppFactory = await hre.ethers.getContractFactory("Swap");
     universalApp = await universalAppFactory.deploy(
@@ -420,13 +431,20 @@ describe("EvmDustTokens", function () {
     const isDaiWhiteListed = await dustTokens.isTokenWhitelisted(DAI.address);
     const isLinkWhiteListed = await dustTokens.isTokenWhitelisted(LINK.address);
     const isUniWhiteListed = await dustTokens.isTokenWhitelisted(UNI.address);
+    const isWbtcWhiteListed = await dustTokens.isTokenWhitelisted(WBTC.address);
 
     expect(isDaiWhiteListed).to.be.true;
     expect(isLinkWhiteListed).to.be.true;
     expect(isUniWhiteListed).to.be.true;
+    expect(isWbtcWhiteListed).to.be.true;
 
     let tokens = await dustTokens.getTokens();
-    expect(tokens).to.deep.equal([DAI.address, LINK.address, UNI.address]);
+    expect(tokens).to.deep.equal([
+      DAI.address,
+      LINK.address,
+      UNI.address,
+      WBTC.address,
+    ]);
 
     await dustTokens.removeToken(DAI.address);
 
@@ -439,20 +457,25 @@ describe("EvmDustTokens", function () {
     const isUniWhiteListedAfter = await dustTokens.isTokenWhitelisted(
       UNI.address
     );
+    const isWbtcWhiteListedAfter = await dustTokens.isTokenWhitelisted(
+      WBTC.address
+    );
 
     expect(isDaiWhiteListedAfter).to.be.false;
     expect(isLinkWhiteListedAfter).to.be.true;
     expect(isUniWhiteListedAfter).to.be.true;
+    expect(isWbtcWhiteListedAfter).to.be.true;
 
     const balances = await dustTokens.getBalances(signer.address);
     expect(balances).to.deep.equal([
-      [UNI.address, LINK.address],
-      [await UNI.name(), await LINK.name()],
-      [await UNI.symbol(), await LINK.symbol()],
-      [await UNI.decimals(), await LINK.decimals()],
+      [WBTC.address, LINK.address, UNI.address],
+      [await WBTC.name(), await LINK.name(), await UNI.name()],
+      [await WBTC.symbol(), await LINK.symbol(), await UNI.symbol()],
+      [await WBTC.decimals(), await LINK.decimals(), await UNI.decimals()],
       [
-        await UNI.balanceOf(signer.address),
+        await WBTC.balanceOf(signer.address),
         await LINK.balanceOf(signer.address),
+        await UNI.balanceOf(signer.address),
       ],
     ]);
   });

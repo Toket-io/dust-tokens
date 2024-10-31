@@ -97,10 +97,7 @@ contract EvmDustTokens is Ownable {
             address token = swap.token;
             uint256 amount = swap.amount;
 
-            require(
-                whitelistedTokens[outputToken],
-                "Output token not whitelisted"
-            );
+            require(whitelistedTokens[token], "Swap token not whitelisted");
 
             // Check allowance and balance
             uint256 allowance = IERC20(token).allowance(
