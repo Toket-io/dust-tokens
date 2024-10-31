@@ -108,12 +108,16 @@ export default function Component() {
   const [contract, setContract] = useState(null);
   const [balances, setBalances] = useState<Token[]>([]);
   const [outputBalances, setOutputBalances] = useState<Token[]>([]);
+  const [selectedOutputToken, setSelectedOutputToken] = useState<Token | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
   const [transactionPending, setTransactionPending] = useState(false);
   const [totalEthOutput, setTotalEthOutput] = useState<string>("");
   const [showSuccess, setShowSuccess] = useState<boolean>(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
+  const [openOutputToken, setOpenOutputToken] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<SelectedToken[]>([]);
   const [selectedNetwork, setSelectedNetwork] = useState<Network | null>(null);
 
@@ -163,6 +167,11 @@ export default function Component() {
       );
     }
     setOpenToken(false);
+  };
+
+  const handleSelectOutputToken = (token: Token) => {
+    setSelectedOutputToken(token);
+    setOpenOutputToken(false);
   };
 
   const handleRemoveToken = (tokenValue: string) => {
@@ -613,67 +622,105 @@ export default function Component() {
                 },
               ]}
             >
-              <div>
-                <Popover open={openNetwork} onOpenChange={setOpenNetwork}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openNetwork}
-                      className="w-full justify-between"
-                      disabled={loading || transactionPending}
+              <Card className="rounded-2xl items-start w-64">
+                <CardHeader>
+                  <CardTitle>{"Output"}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="items-center w-full space-y-2">
+                    <Popover open={openNetwork} onOpenChange={setOpenNetwork}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openNetwork}
+                          className="w-full justify-between"
+                          disabled={loading || transactionPending}
+                        >
+                          {selectedNetwork?.label || "Select Network"}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0">
+                        <Command>
+                          <CommandInput placeholder="Search networks..." />
+                          <CommandList>
+                            <CommandEmpty>No network found.</CommandEmpty>
+                            <CommandGroup>
+                              {networks.map((network) => (
+                                <CommandItem
+                                  key={network.value}
+                                  disabled={!network.enabled}
+                                  onSelect={() => handleSelectNetwork(network)}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      selectedNetwork?.value === network.value
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    )}
+                                  />
+                                  {network.label}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    <p className="text-center">and</p>
+                    <Popover
+                      open={openOutputToken}
+                      onOpenChange={setOpenOutputToken}
                     >
-                      {selectedNetwork?.label || "Select Network"}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput placeholder="Search networks..." />
-                      <CommandList>
-                        <CommandEmpty>No network found.</CommandEmpty>
-                        <CommandGroup>
-                          {networks.map((network) => (
-                            <CommandItem
-                              key={network.value}
-                              disabled={!network.enabled}
-                              onSelect={() => handleSelectNetwork(network)}
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4",
-                                  selectedNetwork?.value === network.value
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              {network.label}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </ArcherElement>
-            <ArcherElement id="select-output-token">
-              <div>
-                <Card className="rounded-2xl items-start w-64">
-                  <CardContent>
-                    <div className="items-center w-full pt-6 space-y-2">
-                      <Button
-                        variant="primary"
-                        size="full"
-                        onClick={handleSwapConfirm}
-                        disabled={loading || transactionPending}
-                      >
-                        Swap
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openNetwork}
+                          className="w-full justify-between"
+                          disabled={
+                            loading || transactionPending || !selectedNetwork
+                          }
+                        >
+                          {selectedOutputToken?.name || "Select Output Token"}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0">
+                        <Command>
+                          <CommandInput placeholder="Search tokens..." />
+                          <CommandList>
+                            <CommandEmpty>No token found.</CommandEmpty>
+                            <CommandGroup>
+                              {outputBalances.map((token) => (
+                                <CommandItem
+                                  key={token.name}
+                                  // disabled={!network.enabled}
+                                  onSelect={() =>
+                                    handleSelectOutputToken(token)
+                                  }
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      selectedOutputToken === token
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    )}
+                                  />
+                                  {token.name}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </CardContent>
+              </Card>
             </ArcherElement>
           </div>
         </div>
