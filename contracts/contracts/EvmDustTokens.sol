@@ -161,6 +161,51 @@ contract EvmDustTokens is Ownable {
         );
     }
 
+    function ReceiveTokens(
+        address outputToken,
+        address receiver
+    ) external payable {
+        require(msg.value > 0, "No value provided");
+
+        // Check if the output token is whitelisted
+        require(
+            outputToken == address(0) || whitelistedTokens[outputToken],
+            "Output token not whitelisted"
+        );
+
+        // If outputToken is 0x, send msg.value to the receiver
+        if (outputToken == address(0)) {
+            // Handle native token transfer
+            (bool success, ) = receiver.call{value: msg.value}("");
+            require(success, "Transfer of native token failed");
+            emit SwappedAndWithdrawn(receiver, outputToken, msg.value);
+        } else {
+            // Step 1: Swap msg.value to Wrapped Token (i.e: WETH or WMATIC)
+            IWETH(WETH9).deposit{value: msg.value}();
+
+            // Step 2: Approve swap router to spend WETH
+            TransferHelper.safeApprove(WETH9, address(swapRouter), msg.value);
+
+            // Step 3: Build Uniswap Swap to convert WETH to outputToken
+            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+                .ExactInputSingleParams({
+                    tokenIn: WETH9,
+                    tokenOut: outputToken,
+                    fee: feeTier,
+                    recipient: receiver,
+                    deadline: block.timestamp,
+                    amountIn: msg.value,
+                    amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
+                    sqrtPriceLimitX96: 0
+                });
+
+            // Step 4: Perform the swap
+            uint256 amountOut = swapRouter.exactInputSingle(params);
+
+            emit SwappedAndWithdrawn(receiver, outputToken, amountOut);
+        }
+    }
+
     // Add token to whitelist
     function addToken(address token) public onlyOwner {
         require(token != address(0), "Invalid token address");
@@ -226,51 +271,6 @@ contract EvmDustTokens is Ownable {
                 decimalsArray[i] = token.decimals();
                 balances[i] = token.balanceOf(user);
             }
-        }
-    }
-
-    function ReceiveTokens(
-        address outputToken,
-        address receiver
-    ) external payable {
-        require(msg.value > 0, "No value provided");
-
-        // Check if the output token is whitelisted
-        require(
-            outputToken == address(0) || whitelistedTokens[outputToken],
-            "Output token not whitelisted"
-        );
-
-        // If outputToken is 0x, send msg.value to the receiver
-        if (outputToken == address(0)) {
-            // Handle native token transfer
-            (bool success, ) = receiver.call{value: msg.value}("");
-            require(success, "Transfer of native token failed");
-            emit SwappedAndWithdrawn(receiver, outputToken, msg.value);
-        } else {
-            // Step 1: Swap msg.value to Wrapped Token (i.e: WETH or WMATIC)
-            IWETH(WETH9).deposit{value: msg.value}();
-
-            // Step 2: Approve swap router to spend WETH
-            TransferHelper.safeApprove(WETH9, address(swapRouter), msg.value);
-
-            // Step 3: Build Uniswap Swap to convert WETH to outputToken
-            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
-                .ExactInputSingleParams({
-                    tokenIn: WETH9,
-                    tokenOut: outputToken,
-                    fee: feeTier,
-                    recipient: receiver,
-                    deadline: block.timestamp,
-                    amountIn: msg.value,
-                    amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
-                    sqrtPriceLimitX96: 0
-                });
-
-            // Step 4: Perform the swap
-            uint256 amountOut = swapRouter.exactInputSingle(params);
-
-            emit SwappedAndWithdrawn(receiver, outputToken, amountOut);
         }
     }
 }
