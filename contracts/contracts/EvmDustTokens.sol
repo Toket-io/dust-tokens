@@ -92,7 +92,7 @@ contract EvmDustTokens is Ownable {
 
         require(swaps.length > 0, "No swaps provided");
 
-        // Create an array to store the performed swaps
+        // Array to store performed swaps
         SwapOutput[] memory performedSwaps = new SwapOutput[](swaps.length);
 
         // Loop through each ERC-20 token address provided
@@ -128,7 +128,7 @@ contract EvmDustTokens is Ownable {
                     tokenIn: token,
                     tokenOut: outputToken,
                     fee: feeTier,
-                    recipient: address(this), // Swap to this contract
+                    recipient: address(this),
                     deadline: block.timestamp,
                     amountIn: amount,
                     amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
@@ -139,7 +139,7 @@ contract EvmDustTokens is Ownable {
             uint256 amountOut = swapRouter.exactInputSingle(params);
             totalTokensReceived += amountOut;
 
-            // Store the performed swap details
+            // Store performed swap details
             performedSwaps[i] = SwapOutput({
                 tokenIn: token,
                 tokenOut: WETH9,
@@ -229,9 +229,9 @@ contract EvmDustTokens is Ownable {
 
         // If outputToken is 0x, send msg.value to the receiver
         if (outputToken == address(0)) {
+            // Handle native token transfer
             (bool success, ) = receiver.call{value: msg.value}("");
             require(success, "Transfer of native token failed");
-
             emit SwappedAndWithdrawn(receiver, outputToken, msg.value);
         } else {
             // Step 1: Swap msg.value to Wrapped Token (i.e: WETH or WMATIC)
@@ -246,7 +246,7 @@ contract EvmDustTokens is Ownable {
                     tokenIn: WETH9,
                     tokenOut: outputToken,
                     fee: feeTier,
-                    recipient: receiver, // Swap to this contract
+                    recipient: receiver,
                     deadline: block.timestamp,
                     amountIn: msg.value,
                     amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
