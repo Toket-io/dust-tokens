@@ -24,6 +24,7 @@ contract Swap is UniversalContract {
     struct Params {
         address target;
         bytes to;
+        bytes destinationPayload;
     }
 
     function onCrossChainCall(
@@ -32,37 +33,67 @@ contract Swap is UniversalContract {
         uint256 amount,
         bytes calldata message
     ) external override {
-        Params memory params = Params({target: address(0), to: bytes("")});
+        Params memory params = Params({
+            target: address(0),
+            to: bytes(""),
+            destinationPayload: bytes("")
+        });
         if (context.chainID == BITCOIN) {
             params.target = BytesHelperLib.bytesToAddress(message, 0);
             params.to = abi.encodePacked(
                 BytesHelperLib.bytesToAddress(message, 20)
             );
         } else {
-            (address targetToken, bytes memory recipient) = abi.decode(
-                message,
-                (address, bytes)
-            );
+            (
+                address targetToken,
+                bytes memory recipient,
+                bytes memory destinationPayload
+            ) = abi.decode(message, (address, bytes, bytes));
             params.target = targetToken;
             params.to = recipient;
+            params.destinationPayload = destinationPayload;
         }
 
-        swapAndWithdraw(zrc20, amount, params.target, params.to);
+        swapAndWithdraw(
+            zrc20,
+            amount,
+            params.target,
+            params.to,
+            params.destinationPayload
+        );
     }
+
+    event Debug(
+        bytes recipient,
+        address inputToken,
+        uint256 amount,
+        address targetToken,
+        uint256 targetAmount,
+        address gasZRC20,
+        uint256 gasFee,
+        bytes payload
+    );
 
     function swapAndWithdraw(
         address inputToken,
         uint256 amount,
         address targetToken,
-        bytes memory recipient
+        bytes memory recipient,
+        bytes memory payload
     ) internal {
         uint256 inputForGas;
         address gasZRC20;
         uint256 gasFee;
         uint256 swapAmount;
 
-        (gasZRC20, gasFee) = IZRC20(targetToken).withdrawGasFee();
+        uint256 gasLimit = 7000000; // TODO: set correct gas limit
 
+        // Get the gas fee required for withdrawal and call
+        (gasZRC20, gasFee) = IZRC20(targetToken).withdrawGasFeeWithGasLimit(
+            gasLimit
+        );
+
+        // Calculate the amount left after covering gas fees
         if (gasZRC20 == inputToken) {
             swapAmount = amount - gasFee;
         } else {
@@ -76,14 +107,21 @@ contract Swap is UniversalContract {
             swapAmount = amount - inputForGas;
         }
 
-        uint256 outputAmount = SwapHelperLib.swapExactTokensForTokens(
-            systemContract,
-            inputToken,
-            swapAmount,
-            targetToken,
-            0
-        );
+        // Perform the token swap if the input and target tokens are different
+        uint256 outputAmount;
+        if (inputToken != targetToken) {
+            outputAmount = SwapHelperLib.swapExactTokensForTokens(
+                systemContract,
+                inputToken,
+                swapAmount,
+                targetToken,
+                0
+            );
+        } else {
+            outputAmount = swapAmount;
+        }
 
+        // Approve the gateway to spend the tokens
         if (gasZRC20 == targetToken) {
             IZRC20(gasZRC20).approve(address(gateway), outputAmount + gasFee);
         } else {
@@ -91,17 +129,88 @@ contract Swap is UniversalContract {
             IZRC20(targetToken).approve(address(gateway), outputAmount);
         }
 
-        gateway.withdraw(
+        // Prepare the revert options
+        RevertOptions memory revertOptions = RevertOptions({
+            revertAddress: address(0),
+            callOnRevert: false,
+            abortAddress: address(0),
+            revertMessage: "",
+            onRevertGasLimit: 0
+        });
+
+        // Emit a debug event for monitoring
+        emit Debug(
+            recipient,
+            inputToken,
+            amount,
+            targetToken,
+            outputAmount,
+            gasZRC20,
+            gasFee,
+            payload
+        );
+
+        // Execute the withdrawal and call operation via the gateway
+        gateway.withdrawAndCall(
             recipient,
             outputAmount,
             targetToken,
-            RevertOptions({
-                revertAddress: address(0),
-                callOnRevert: false,
-                abortAddress: address(0),
-                revertMessage: "",
-                onRevertGasLimit: 0
-            })
+            payload,
+            gasLimit,
+            revertOptions
+        );
+    }
+
+    event HelloEvent(string, string);
+    event RevertEvent(string, RevertContext);
+    error TransferFailed();
+
+    function call(
+        bytes memory receiver,
+        address zrc20,
+        bytes calldata message,
+        uint256 gasLimit,
+        RevertOptions memory revertOptions
+    ) external {
+        (, uint256 gasFee) = IZRC20(zrc20).withdrawGasFeeWithGasLimit(gasLimit);
+        if (!IZRC20(zrc20).transferFrom(msg.sender, address(this), gasFee)) {
+            revert TransferFailed();
+        }
+        IZRC20(zrc20).approve(address(gateway), gasFee);
+        gateway.call(receiver, zrc20, message, gasLimit, revertOptions);
+    }
+
+    function withdrawAndCall(
+        bytes memory receiver,
+        uint256 amount,
+        address zrc20,
+        bytes calldata message,
+        uint256 gasLimit,
+        RevertOptions memory revertOptions
+    ) external {
+        (address gasZRC20, uint256 gasFee) = IZRC20(zrc20)
+            .withdrawGasFeeWithGasLimit(gasLimit);
+        uint256 target = zrc20 == gasZRC20 ? amount + gasFee : amount;
+        if (!IZRC20(zrc20).transferFrom(msg.sender, address(this), target))
+            revert TransferFailed();
+        IZRC20(zrc20).approve(address(gateway), target);
+        if (zrc20 != gasZRC20) {
+            if (
+                !IZRC20(gasZRC20).transferFrom(
+                    msg.sender,
+                    address(this),
+                    gasFee
+                )
+            ) revert TransferFailed();
+            IZRC20(gasZRC20).approve(address(gateway), gasFee);
+        }
+        gateway.withdrawAndCall(
+            receiver,
+            amount,
+            zrc20,
+            message,
+            gasLimit,
+            revertOptions
         );
     }
 

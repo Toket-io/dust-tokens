@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 
@@ -16,12 +17,10 @@ interface IWETH is IERC20 {
     function deposit() external payable;
 
     function withdraw(uint256 amount) external;
-
-    function withdrawTo(address account, uint256 amount) external;
 }
 
 // Custom ERC20 Interface with optional metadata functions
-interface IERC20Metadata {
+interface IERC20Metadata is IERC20 {
     function name() external view returns (string memory);
 
     function symbol() external view returns (string memory);
@@ -31,43 +30,46 @@ interface IERC20Metadata {
     function balanceOf(address account) external view returns (uint256);
 }
 
-struct TokenSwap {
+struct SwapInput {
     address token;
     uint256 amount;
 }
 
-contract EvmDustTokens {
+struct SwapOutput {
+    address tokenIn;
+    address tokenOut;
+    uint256 amountIn;
+    uint256 amountOut;
+}
+
+contract EvmDustTokens is Ownable {
     GatewayEVM public gateway;
     uint256 constant BITCOIN = 18332;
-    address[] private tokenList;
+    mapping(address => bool) public whitelistedTokens;
+    address[] public tokenList;
     ISwapRouter public immutable swapRouter;
     address payable public immutable WETH9;
-
     uint24 public constant feeTier = 3000;
 
     event TokenAdded(address indexed token);
     event TokenRemoved(address indexed token);
-
-    // Define the event to track the swaps and deposits
     event SwappedAndDeposited(
         address indexed executor,
-        PerformedSwap[] swaps,
+        SwapOutput[] swaps,
         uint256 totalTokensReceived
     );
-
-    // Define the PerformedSwap struct
-    struct PerformedSwap {
-        address tokenIn;
-        address tokenOut;
-        uint256 amountIn;
-        uint256 amountOut;
-    }
+    event SwappedAndWithdrawn(
+        address indexed receiver,
+        address outputToken,
+        uint256 totalTokensReceived
+    );
 
     constructor(
         address payable gatewayAddress,
         ISwapRouter _swapRouter,
-        address payable _WETH9
-    ) {
+        address payable _WETH9,
+        address initialOwner
+    ) Ownable(initialOwner) {
         gateway = GatewayEVM(gatewayAddress);
         swapRouter = _swapRouter;
         WETH9 = _WETH9;
@@ -76,7 +78,7 @@ contract EvmDustTokens {
     receive() external payable {}
 
     function SwapAndBridgeTokens(
-        TokenSwap[] memory swaps,
+        SwapInput[] memory swaps,
         address universalApp,
         bytes calldata payload,
         RevertOptions calldata revertOptions
@@ -86,16 +88,16 @@ contract EvmDustTokens {
 
         require(swaps.length > 0, "No swaps provided");
 
-        // Create an array to store the performed swaps
-        PerformedSwap[] memory performedSwaps = new PerformedSwap[](
-            swaps.length
-        );
+        // Array to store performed swaps
+        SwapOutput[] memory performedSwaps = new SwapOutput[](swaps.length);
 
         // Loop through each ERC-20 token address provided
         for (uint256 i = 0; i < swaps.length; i++) {
-            TokenSwap memory swap = swaps[i];
+            SwapInput memory swap = swaps[i];
             address token = swap.token;
             uint256 amount = swap.amount;
+
+            require(whitelistedTokens[token], "Swap token not whitelisted");
 
             // Check allowance and balance
             uint256 allowance = IERC20(token).allowance(
@@ -124,7 +126,7 @@ contract EvmDustTokens {
                     tokenIn: token,
                     tokenOut: outputToken,
                     fee: feeTier,
-                    recipient: address(this), // Swap to this contract
+                    recipient: address(this),
                     deadline: block.timestamp,
                     amountIn: amount,
                     amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
@@ -135,8 +137,8 @@ contract EvmDustTokens {
             uint256 amountOut = swapRouter.exactInputSingle(params);
             totalTokensReceived += amountOut;
 
-            // Store the performed swap details
-            performedSwaps[i] = PerformedSwap({
+            // Store performed swap details
+            performedSwaps[i] = SwapOutput({
                 tokenIn: token,
                 tokenOut: WETH9,
                 amountIn: amount,
@@ -159,52 +161,84 @@ contract EvmDustTokens {
         );
     }
 
-    // Tokens
-    function addToken(address token) public {
+    function ReceiveTokens(
+        address outputToken,
+        address receiver
+    ) external payable {
+        require(msg.value > 0, "No value provided");
+
+        // Check if the output token is whitelisted
+        require(
+            outputToken == address(0) || whitelistedTokens[outputToken],
+            "Output token not whitelisted"
+        );
+
+        // If outputToken is 0x, send msg.value to the receiver
+        if (outputToken == address(0)) {
+            // Handle native token transfer
+            (bool success, ) = receiver.call{value: msg.value}("");
+            require(success, "Transfer of native token failed");
+            emit SwappedAndWithdrawn(receiver, outputToken, msg.value);
+        } else {
+            // Step 1: Swap msg.value to Wrapped Token (i.e: WETH or WMATIC)
+            IWETH(WETH9).deposit{value: msg.value}();
+
+            // Step 2: Approve swap router to spend WETH
+            TransferHelper.safeApprove(WETH9, address(swapRouter), msg.value);
+
+            // Step 3: Build Uniswap Swap to convert WETH to outputToken
+            ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+                .ExactInputSingleParams({
+                    tokenIn: WETH9,
+                    tokenOut: outputToken,
+                    fee: feeTier,
+                    recipient: receiver,
+                    deadline: block.timestamp,
+                    amountIn: msg.value,
+                    amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
+                    sqrtPriceLimitX96: 0
+                });
+
+            // Step 4: Perform the swap
+            uint256 amountOut = swapRouter.exactInputSingle(params);
+
+            emit SwappedAndWithdrawn(receiver, outputToken, amountOut);
+        }
+    }
+
+    // Add token to whitelist
+    function addToken(address token) public onlyOwner {
         require(token != address(0), "Invalid token address");
+        require(!whitelistedTokens[token], "Token already whitelisted");
+        whitelistedTokens[token] = true;
         tokenList.push(token);
         emit TokenAdded(token);
     }
 
-    function removeToken(address token) public {
+    // Remove token from whitelist
+    function removeToken(address token) public onlyOwner {
         require(token != address(0), "Invalid token address");
+        require(whitelistedTokens[token], "Token not whitelisted");
+        whitelistedTokens[token] = false;
 
+        // Remove token from the tokenList
         for (uint256 i = 0; i < tokenList.length; i++) {
             if (tokenList[i] == token) {
                 tokenList[i] = tokenList[tokenList.length - 1];
                 tokenList.pop();
-                emit TokenRemoved(token);
                 break;
             }
         }
+        emit TokenRemoved(token);
     }
 
-    function getTokens()
-        external
-        view
-        returns (
-            address[] memory,
-            string[] memory,
-            string[] memory,
-            uint8[] memory
-        )
-    {
-        uint256 length = tokenList.length;
+    function getTokens() external view returns (address[] memory) {
+        return tokenList;
+    }
 
-        address[] memory addresses = new address[](length);
-        string[] memory names = new string[](length);
-        string[] memory symbols = new string[](length);
-        uint8[] memory decimalsList = new uint8[](length);
-
-        for (uint256 i = 0; i < length; i++) {
-            IERC20Metadata token = IERC20Metadata(tokenList[i]);
-            addresses[i] = tokenList[i];
-            names[i] = token.name();
-            symbols[i] = token.symbol();
-            decimalsList[i] = token.decimals();
-        }
-
-        return (addresses, names, symbols, decimalsList);
+    // Check if a token is whitelisted
+    function isTokenWhitelisted(address token) external view returns (bool) {
+        return whitelistedTokens[token];
     }
 
     function getBalances(
@@ -213,30 +247,30 @@ contract EvmDustTokens {
         external
         view
         returns (
-            address[] memory,
-            string[] memory,
-            string[] memory,
-            uint8[] memory,
-            uint256[] memory
+            address[] memory addresses,
+            string[] memory names,
+            string[] memory symbols,
+            uint8[] memory decimalsArray,
+            uint256[] memory balances
         )
     {
-        uint256 length = tokenList.length;
+        uint256 tokenCount = tokenList.length;
 
-        address[] memory addresses = new address[](length);
-        string[] memory names = new string[](length);
-        string[] memory symbols = new string[](length);
-        uint8[] memory decimalsList = new uint8[](length);
-        uint256[] memory balances = new uint256[](length);
+        addresses = new address[](tokenCount);
+        names = new string[](tokenCount);
+        symbols = new string[](tokenCount);
+        decimalsArray = new uint8[](tokenCount);
+        balances = new uint256[](tokenCount);
 
-        for (uint256 i = 0; i < length; i++) {
-            IERC20Metadata token = IERC20Metadata(tokenList[i]);
-            addresses[i] = tokenList[i];
-            names[i] = token.name();
-            symbols[i] = token.symbol();
-            decimalsList[i] = token.decimals();
-            balances[i] = token.balanceOf(user);
+        for (uint256 i = 0; i < tokenCount; i++) {
+            if (whitelistedTokens[tokenList[i]]) {
+                IERC20Metadata token = IERC20Metadata(tokenList[i]);
+                addresses[i] = tokenList[i];
+                names[i] = token.name();
+                symbols[i] = token.symbol();
+                decimalsArray[i] = token.decimals();
+                balances[i] = token.balanceOf(user);
+            }
         }
-
-        return (addresses, names, symbols, decimalsList, balances);
     }
 }

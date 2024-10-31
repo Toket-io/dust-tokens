@@ -18,23 +18,20 @@ const ZETA_SYSTEM_CONTRACT_ADDRESS: string =
 const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
 const ZETA_ETH_ADDRESS: string = ContractsConfig.zeta_ethEthToken;
 
-const WETH_ADDRESS: string = process.env.WETH_ADDRESS ?? "";
+const WETH_ADDRESS: string = ContractsConfig.evm_weth ?? "";
 const DAI_ADDRESS: string = process.env.DAI_ADDRESS ?? "";
 const USDC_ADDRESS: string = process.env.USDC_ADDRESS ?? "";
 const UNI_ADDRESS = process.env.UNI_ADDRESS ?? "";
 const LINK_ADDRESS: string = process.env.LINK_ADDRESS ?? "";
 const WBTC_ADDRESS: string = process.env.WBTC_ADDRESS ?? "";
 
-const WETH_PRICE_FEED: string = process.env.WETH_PRICE_FEED ?? "";
-const DAI_PRICE_FEED: string = process.env.DAI_PRICE_FEED ?? "";
-const WBTC_PRICE_FEED: string = process.env.WBTC_PRICE_FEED ?? "";
-const LINK_PRICE_FEED: string = process.env.LINK_PRICE_FEED ?? "";
-const ARB_PRICE_FEED: string = process.env.ARB_PRICE_FEED ?? "";
-
 const UNISWAP_ROUTER: string = ContractsConfig.evm_uniswapRouterV3;
 
 const ercAbi = [
   // Read-Only Functions
+  "function symbol() view returns (string)",
+  "function name() view returns (string)",
+  "function decimals() view returns (uint8)",
   "function balanceOf(address owner) view returns (uint256)",
   // Authenticated Functions
   "function transfer(address to, uint amount) returns (bool)",
@@ -43,9 +40,15 @@ const ercAbi = [
   "function withdraw(uint256 wad) external",
 ];
 
+type TokenSwap = {
+  amount: BigNumber;
+  token: string;
+};
+
 describe("EvmDustTokens", function () {
   let signer: SignerWithAddress;
   let receiver: SignerWithAddress;
+  let notOwner: SignerWithAddress;
 
   // EVM side Contracts
   let simpleSwap: SimpleSwap;
@@ -63,17 +66,96 @@ describe("EvmDustTokens", function () {
   let ZETA_USDC_ETH: Contract;
   let ZETA_ETH: Contract;
 
+  // MARK: Helper Functions
+  const encodeDestinationPayload = (
+    recipient: string,
+    outputToken: string
+  ): string => {
+    const destinationPayloadTypes = ["address", "address"];
+    const destinationFunctionParams = hre.ethers.utils.defaultAbiCoder.encode(
+      destinationPayloadTypes,
+      [outputToken, recipient]
+    );
+
+    const functionName = "ReceiveTokens(address,address)";
+    const functionSignature = hre.ethers.utils.id(functionName).slice(0, 10);
+    const destinationPayload = hre.ethers.utils.hexlify(
+      hre.ethers.utils.concat([functionSignature, destinationFunctionParams])
+    );
+
+    return destinationPayload;
+  };
+
+  const encodeZetachainPayload = (
+    outputChainToken: string,
+    destinationContract: string,
+    destinationPayload: string
+  ) => {
+    const args = {
+      types: ["address", "bytes", "bytes"],
+      values: [outputChainToken, destinationContract, destinationPayload],
+    };
+
+    // Prepare encoded parameters for the call
+    const valuesArray = args.values.map((value, index) => {
+      const type = args.types[index];
+      if (type === "bool") {
+        try {
+          return JSON.parse(value.toLowerCase());
+        } catch (e) {
+          throw new Error(`Invalid boolean value: ${value}`);
+        }
+      } else if (type.startsWith("uint") || type.startsWith("int")) {
+        return hre.ethers.BigNumber.from(value);
+      } else {
+        return value;
+      }
+    });
+
+    const encodedParameters = hre.ethers.utils.defaultAbiCoder.encode(
+      args.types,
+      valuesArray
+    );
+
+    return encodedParameters;
+  };
+
+  const approveTokens = async (tokenSwaps: TokenSwap[]) => {
+    for (const swap of tokenSwaps) {
+      const contract = new hre.ethers.Contract(swap.token, ercAbi, signer);
+      const approveTx = await contract.approve(dustTokens.address, swap.amount);
+      await approveTx.wait();
+
+      const tokenName = await contract.name();
+      const tokenDecimals = await contract.decimals();
+      const formattedAmount = hre.ethers.utils.formatUnits(
+        swap.amount,
+        tokenDecimals
+      );
+
+      console.log(`${tokenName} approved ${formattedAmount}`);
+    }
+  };
+
+  // MARK: Setup
   this.beforeAll(async function () {
     // Save Signer
     let signers = await hre.ethers.getSigners();
     signer = signers[0];
 
-    receiver = signers[1];
+    receiver = signers[2];
+
+    notOwner = signers[3];
+
+    console.log("Signer Address:", signer.address);
+    console.log("Receiver Address:", receiver.address);
+    console.log("Not Owner Address:", notOwner.address);
 
     // Deploy the SimpleSwap contract
     const simpleSwapFactory = await hre.ethers.getContractFactory("SimpleSwap");
     simpleSwap = await simpleSwapFactory.deploy(UNISWAP_ROUTER, WETH_ADDRESS);
     await simpleSwap.deployed();
+    console.log("SimpleSwap deployed to:", simpleSwap.address);
 
     // Deploy the DustTokens contract
     const evmDustTokensFactory = await hre.ethers.getContractFactory(
@@ -82,10 +164,17 @@ describe("EvmDustTokens", function () {
     dustTokens = await evmDustTokensFactory.deploy(
       GATEWAY_ADDRESS,
       UNISWAP_ROUTER,
-      WETH_ADDRESS
+      WETH_ADDRESS,
+      signer.address
     );
     await dustTokens.deployed();
     console.log("DustTokens deployed to:", dustTokens.address);
+
+    // Configure initial whitelisted tokens
+    await dustTokens.addToken(DAI_ADDRESS);
+    await dustTokens.addToken(LINK_ADDRESS);
+    await dustTokens.addToken(UNI_ADDRESS);
+    await dustTokens.addToken(WBTC_ADDRESS);
 
     // Connect to ERC20s
     WETH = new hre.ethers.Contract(WETH_ADDRESS, ercAbi, signer);
@@ -95,7 +184,6 @@ describe("EvmDustTokens", function () {
     UNI = new hre.ethers.Contract(UNI_ADDRESS, ercAbi, signer);
     WBTC = new hre.ethers.Contract(WBTC_ADDRESS, ercAbi, signer);
 
-    // Connect to ZetaChain contracts
     // Deploy the Universal App contract
     const universalAppFactory = await hre.ethers.getContractFactory("Swap");
     universalApp = await universalAppFactory.deploy(
@@ -103,7 +191,7 @@ describe("EvmDustTokens", function () {
       ZETA_GATEWAY_ADDRESS
     );
     await universalApp.deployed();
-    console.log("Universal app deployed to:", universalApp.address);
+    console.log("Universal App deployed to:", universalApp.address);
 
     // Connect to ERC20s
     ZETA_USDC_ETH = new hre.ethers.Contract(
@@ -181,734 +269,212 @@ describe("EvmDustTokens", function () {
     startBalances = formattedBalances;
   });
 
-  it("Should swap all tokens for WETH", async function () {
-    // AMOUNT TO SWAP
-    const swapAmount = "1";
+  // MARK: Tests
+  it("Should swap input tokens and output specified token on destination chain", async function () {
+    // Step 0: Output token
+    const outputTokenContract = UNI;
 
-    // ERC-20 Contracts to be swapped, with their names
-    const ercContracts = [
-      { contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
-      { contract: USDC, decimals: USDC_DECIMALS, name: "USDC" },
-      { contract: LINK, decimals: DAI_DECIMALS, name: "LINK" }, // Assuming LINK uses the same decimals as DAI
-      { contract: UNI, decimals: DAI_DECIMALS, name: "UNI" }, // Assuming LINK uses the same decimals as DAI
-      //   { contract: WBTC, decimals: DAI_DECIMALS, name: "WBTC" }, // Assuming LINK uses the same decimals as DAI
-    ];
-
-    // Approve the MultiSwap contract to spend tokens
-    for (const { name, contract, decimals } of ercContracts) {
-      const formattedAmount = hre.ethers.utils.parseUnits(swapAmount, decimals);
-
-      const approveTx = await contract.approve(
-        dustTokens.address,
-        formattedAmount
-      );
-      await approveTx.wait();
-
-      console.log(`${name} approved for MultiSwap`);
-    }
-
-    // Check Initial Balances
-    const beforeBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      beforeBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
-    }
-
-    // Execute the swap
-    const tokenAddresses = ercContracts.map(({ contract }) => contract.address);
-    const swapTx = await dustTokens.executeMultiSwap(tokenAddresses);
-    await swapTx.wait();
-    console.log("MultiSwap executed");
-
-    // Check Result Balances
-    const afterBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      afterBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
-    }
-
-    // Log the balance differences
-    for (const { name } of ercContracts) {
-      const before = beforeBalances[name];
-      const after = afterBalances[name];
-      console.log(
-        `${name} balance - Before: ${before}, After: ${after}, Diff: ${
-          before - after
-        }`
-      );
-    }
-
-    // Assertions: Ensure each token's balance decreased after the swap
-    for (const { name } of ercContracts) {
-      const diff = beforeBalances[name] - afterBalances[name];
-
-      // Ensure the final balance is less than the initial balance
-      expect(afterBalances[name]).to.be.lessThan(beforeBalances[name]);
-
-      // Ensure the difference matches the swap amount
-      expect(diff).to.equal(Number(swapAmount));
-    }
-
-    // Check WETH balance
-    const expandedWETHBalanceAfter = await WETH.balanceOf(signer.address);
-    const WETHBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedWETHBalanceAfter, DAI_DECIMALS)
-    );
-    const WETHBalanceBefore = startBalances["weth"];
-    console.log(
-      `WETH balance - Before: ${WETHBalanceBefore}, After: ${WETHBalanceAfter}, Diff: ${
-        WETHBalanceBefore - WETHBalanceAfter
-      }`
-    );
-    // Ensure the WETH balance increased after the swap
-    expect(WETHBalanceAfter).to.be.greaterThan(WETHBalanceBefore);
-  });
-
-  it("Should swap all tokens for NATIVE ETH", async function () {
-    // AMOUNT TO SWAP
-    const swapAmount = "1";
-
-    const expandedWETHBalanceBefore = await WETH.balanceOf(dustTokens.address);
-    const WETHBalanceBefore = Number(
-      hre.ethers.utils.formatUnits(expandedWETHBalanceBefore, DAI_DECIMALS)
-    );
-
-    // ERC-20 Contracts to be swapped, with their names
-    const ercContracts = [
-      { contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
-      { contract: USDC, decimals: USDC_DECIMALS, name: "USDC" },
-      { contract: LINK, decimals: DAI_DECIMALS, name: "LINK" }, // Assuming LINK uses the same decimals as DAI
-      { contract: UNI, decimals: DAI_DECIMALS, name: "UNI" }, // Assuming LINK uses the same decimals as DAI
-      //   { contract: WBTC, decimals: DAI_DECIMALS, name: "WBTC" }, // Assuming LINK uses the same decimals as DAI
-    ];
-
-    // Approve the MultiSwap contract to spend tokens
-    for (const { name, contract, decimals } of ercContracts) {
-      const formattedAmount = hre.ethers.utils.parseUnits(swapAmount, decimals);
-
-      const approveTx = await contract.approve(
-        dustTokens.address,
-        formattedAmount
-      );
-      await approveTx.wait();
-
-      console.log(`${name} approved for MultiSwap`);
-    }
-
-    // Check Initial Balances
-    const beforeBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      beforeBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
-    }
-
-    // Execute the swap
-    const tokenAddresses = ercContracts.map(({ contract }) => contract.address);
-    const swapTx = await dustTokens.executeMultiSwapAndWithdraw(tokenAddresses);
-    await swapTx.wait();
-    console.log("MultiSwap and withdraw executed");
-
-    // Check Result Balances
-    const afterBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      afterBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
-    }
-
-    // Log the balance differences
-    for (const { name } of ercContracts) {
-      const before = beforeBalances[name];
-      const after = afterBalances[name];
-      console.log(
-        `${name} balance - Before: ${before}, After: ${after}, Diff: ${
-          before - after
-        }`
-      );
-    }
-
-    // Assertions: Ensure each token's balance decreased after the swap
-    for (const { name } of ercContracts) {
-      const diff = beforeBalances[name] - afterBalances[name];
-
-      // Ensure the final balance is less than the initial balance
-      expect(afterBalances[name]).to.be.lessThan(beforeBalances[name]);
-
-      // Ensure the difference matches the swap amount
-      expect(diff).to.greaterThanOrEqual(Number(swapAmount) * 0.99);
-    }
-
-    // CONTRACT WETH BALANCE
-    const expandedWETHBalanceAfter = await WETH.balanceOf(dustTokens.address);
-    const WETHBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedWETHBalanceAfter, DAI_DECIMALS)
-    );
-
-    console.log(
-      `WETH balance - Before: ${WETHBalanceBefore}, After: ${WETHBalanceAfter}, Diff: ${
-        WETHBalanceBefore - WETHBalanceAfter
-      }`
-    );
-
-    // Check native balance
-    const expandedNativeEthBalanceAfter = await signer.getBalance();
-    const nativeEthBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedNativeEthBalanceAfter, DAI_DECIMALS)
-    );
-
-    const nativeEthBalanceBefore = startBalances["nativeEth"];
-    const diff = nativeEthBalanceBefore - nativeEthBalanceAfter;
-
-    console.log(
-      `Native ETH balance - Before: ${nativeEthBalanceBefore}, After: ${nativeEthBalanceAfter}, Diff: ${diff}`
-    );
-
-    expect(nativeEthBalanceAfter).is.greaterThan(nativeEthBalanceBefore);
-  });
-
-  it("Should swap all tokens for USDC", async function () {
-    // AMOUNT TO SWAP
-    const swapAmount = "1";
-
-    const expandedUSDCBalanceBefore = await USDC.balanceOf(signer.address);
-    const USDCBalanceBefore = Number(
-      hre.ethers.utils.formatUnits(expandedUSDCBalanceBefore, USDC_DECIMALS)
-    );
-
-    // ERC-20 Contracts to be swapped, with their names
-    const ercContracts = [
-      { contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
-      { contract: WETH, decimals: DAI_DECIMALS, name: "WETH" },
-      { contract: LINK, decimals: DAI_DECIMALS, name: "LINK" },
-      { contract: UNI, decimals: DAI_DECIMALS, name: "UNI" },
-    ];
-
-    // Approve the MultiSwap contract to spend tokens
-    for (const { name, contract, decimals } of ercContracts) {
-      const formattedAmount = hre.ethers.utils.parseUnits(swapAmount, decimals);
-
-      const approveTx = await contract.approve(
-        dustTokens.address,
-        formattedAmount
-      );
-      await approveTx.wait();
-
-      console.log(`${name} approved for MultiSwap`);
-    }
-
-    // Check Initial Balances
-    const beforeBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      beforeBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
-    }
-
-    // Execute the swap
-    const tokenAddresses = ercContracts.map(({ contract }) => contract.address);
-    const swapTx = await dustTokens.executeMultiSwapAndWithdrawUSDC(
-      tokenAddresses
-    );
-    const receipt = await swapTx.wait(); // Wait for the transaction to be mined
-
-    // Extract the totalReceived value from the emitted event
-    const event = receipt.events?.find(
-      (e) => e.event === "MultiSwapExecutedAndWithdrawn"
-    );
-    const totalReceived = event?.args?.totalWethReceived;
-    const formmateTotalReceived = hre.ethers.utils.formatUnits(
-      totalReceived,
-      USDC_DECIMALS
-    );
-
-    console.log(`Total received in USDC: ${formmateTotalReceived}`);
-
-    // Check Result Balances
-    const afterBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      afterBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
-    }
-
-    // Log the balance differences
-    for (const { name } of ercContracts) {
-      const before = beforeBalances[name];
-      const after = afterBalances[name];
-      console.log(
-        `${name} balance - Before: ${before}, After: ${after}, Diff: ${
-          before - after
-        }`
-      );
-    }
-
-    // Assertions: Ensure each token's balance decreased after the swap
-    for (const { name } of ercContracts) {
-      const diff = beforeBalances[name] - afterBalances[name];
-
-      // Ensure the final balance is less than the initial balance
-      expect(afterBalances[name]).to.be.lessThan(beforeBalances[name]);
-
-      // Ensure the difference matches the swap amount
-      expect(diff).to.greaterThanOrEqual(Number(swapAmount) * 0.99);
-    }
-
-    // CONTRACT WETH BALANCE
-    const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
-    const USDCBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
-    );
-    const USDCDiff = USDCBalanceBefore - USDCBalanceAfter;
-
-    console.log(
-      `USDC balance - Before: ${USDCBalanceBefore}, After: ${USDCBalanceAfter}, Diff: ${USDCDiff}`
-    );
-
-    expect(USDCBalanceAfter).is.greaterThan(USDCBalanceBefore);
-  });
-
-  it("Should deposit and withdraw WETH from contract", async function () {
-    const depositAmount = hre.ethers.utils.parseEther("0.5");
-    const withdrawAmount = hre.ethers.utils.parseEther("0.5");
-
-    const signerBalanceBefore = await receiver.getBalance();
-
-    console.log(
-      "Signer ETH Balance before deposit:",
-      signerBalanceBefore.toString()
-    );
-
-    // Perform deposit
-    const depositTx = await dustTokens.TestDeposit({ value: depositAmount });
-    await depositTx.wait();
-
-    // Verify balance after deposit
-    const wethBalance = await dustTokens.TestGetBalance();
-    expect(wethBalance).to.equal(depositAmount);
-
-    // Perform withdrawal
-    const withdrawTx = await dustTokens.TestWithdrawToCaller(
+    // Step 1: Create destination chain payload
+    const destinationPayload = encodeDestinationPayload(
       receiver.address,
-      withdrawAmount
-    );
-    await withdrawTx.wait();
-
-    // Check if ETH has been transferred correctly (you may need a helper to check balance)
-    const contractBalanceAfter = await dustTokens.TestGetBalance();
-
-    console.log(
-      "Contract ETH Balance after withdrawal:",
-      contractBalanceAfter.toString()
+      outputTokenContract.address
     );
 
-    // Check if the contract balance is 0
-    expect(contractBalanceAfter).to.equal(0);
-
-    // Check if the signer balance has increased
-    const signerBalanceAfter = await receiver.getBalance();
-    console.log(
-      "Signer ETH Balance after withdrawal:",
-      signerBalanceAfter.toString()
+    // Step 2: Create Zetachain payload
+    const encodedParameters = encodeZetachainPayload(
+      ZETA_ETH_ADDRESS,
+      dustTokens.address,
+      destinationPayload
     );
 
-    // Check signer balance diff (should be equal to the withdraw amount)
-    const diff = signerBalanceAfter.sub(signerBalanceBefore);
-
-    console.log("Diff:", hre.ethers.utils.formatEther(diff));
-
-    // Check if the signer balance has increased
-    expect(diff).to.be.equal(withdrawAmount);
-  });
-
-  it("Should swap all tokens for USDC and deposit in Gateway", async function () {
-    // AMOUNT TO SWAP
-    const swapAmount = "1";
-
-    const expandedUSDCBalanceBefore = await USDC.balanceOf(signer.address);
-    const USDCBalanceBefore = Number(
-      hre.ethers.utils.formatUnits(expandedUSDCBalanceBefore, USDC_DECIMALS)
-    );
-
-    // ERC-20 Contracts to be swapped, with their names
-    const ercContracts = [
-      { contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
-      { contract: WETH, decimals: DAI_DECIMALS, name: "WETH" },
-      { contract: LINK, decimals: DAI_DECIMALS, name: "LINK" },
-      { contract: UNI, decimals: DAI_DECIMALS, name: "UNI" },
-    ];
-
-    // Approve the MultiSwap contract to spend tokens
-    for (const { name, contract, decimals } of ercContracts) {
-      const formattedAmount = hre.ethers.utils.parseUnits(swapAmount, decimals);
-
-      const approveTx = await contract.approve(
-        dustTokens.address,
-        formattedAmount
-      );
-      await approveTx.wait();
-
-      console.log(`${name} approved for MultiSwap`);
-    }
-
-    // Check Initial Balances
-    const beforeBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      beforeBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
-    }
-
-    // Execute the swap
-    const tokenAddresses = ercContracts.map(({ contract }) => contract.address);
-    const swapTx = await dustTokens.multiSwapAndDepositAndCall(tokenAddresses);
-    const receipt = await swapTx.wait(); // Wait for the transaction to be mined
-
-    // Extract the totalReceived value from the emitted event
-    const event = receipt.events?.find(
-      (e) => e.event === "MultiSwapExecutedAndWithdrawn"
-    );
-    const totalReceived = event?.args?.totalWethReceived;
-    const formmateTotalReceived = hre.ethers.utils.formatUnits(
-      totalReceived,
-      USDC_DECIMALS
-    );
-
-    console.log(`Total received in USDC: ${formmateTotalReceived}`);
-
-    // Check Result Balances
-    const afterBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      afterBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
-    }
-
-    // Log the balance differences
-    for (const { name } of ercContracts) {
-      const before = beforeBalances[name];
-      const after = afterBalances[name];
-      console.log(
-        `${name} balance - Before: ${before}, After: ${after}, Diff: ${
-          before - after
-        }`
-      );
-    }
-
-    // Assertions: Ensure each token's balance decreased after the swap
-    for (const { name } of ercContracts) {
-      const diff = beforeBalances[name] - afterBalances[name];
-
-      // Ensure the final balance is less than the initial balance
-      expect(afterBalances[name]).to.be.lessThan(beforeBalances[name]);
-
-      // Ensure the difference matches the swap amount
-      expect(diff).to.greaterThanOrEqual(Number(swapAmount) * 0.99);
-    }
-
-    // CONTRACT WETH BALANCE
-    const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
-    const USDCBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
-    );
-    const USDCDiff = USDCBalanceBefore - USDCBalanceAfter;
-
-    console.log(
-      `USDC balance - Before: ${USDCBalanceBefore}, After: ${USDCBalanceAfter}, Diff: ${USDCDiff}`
-    );
-
-    expect(USDCBalanceAfter).is.greaterThan(USDCBalanceBefore);
-  });
-
-  it("Test deposit directly", async function () {
-    const depositAmount = hre.ethers.utils.parseEther("0.5");
-    const tx = await dustTokens.TestGatewayDeposit(signer.address, {
-      value: depositAmount,
-    });
-    await tx.wait();
-    expect(tx).not.reverted;
-
-    // Wait for 1 second
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Check if ZETA_ETH balance has increased
-    const expandedZETA_ETHBalanceAfter = await ZETA_ETH.balanceOf(
-      signer.address
-    );
-    const ZETA_ETHBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedZETA_ETHBalanceAfter, DAI_DECIMALS)
-    );
-
-    const ZETA_ETHBalanceBefore = startBalances["zeta_eth"];
-    const ZETA_ETHDiff = ZETA_ETHBalanceAfter - ZETA_ETHBalanceBefore;
-    console.log(
-      `ZETA_ETH balance - Before: ${ZETA_ETHBalanceBefore}, After: ${ZETA_ETHBalanceAfter}, Diff: ${ZETA_ETHDiff}`
-    );
-
-    // Ensure the ZETA_ETH balance increased after the deposit
-    expect(ZETA_ETHBalanceAfter).to.be.greaterThan(ZETA_ETHBalanceBefore);
-    expect(ZETA_ETHDiff).to.equal(
-      Number(hre.ethers.utils.formatEther(depositAmount))
-    );
-  });
-
-  it("Test deposit and call directly", async function () {
-    const depositAmount = hre.ethers.utils.parseEther("0.5");
-
-    const args = {
-      amount: "10",
-      erc20: null,
-      gatewayEvm: GATEWAY_ADDRESS,
-      receiver: universalApp.address,
-      revertOptions: {
-        callOnRevert: false,
-        onRevertGasLimit: 7000000,
-        revertAddress: "0x0000000000000000000000000000000000000000",
-        revertMessage: "0x",
-      },
-      txOptions: {
-        gasLimit: 1000000,
-        gasPrice: {
-          hex: "0x3b9aca00",
-          type: "BigNumber",
-        },
-      },
-      types: ["address", "bytes"],
-      values: [ZETA_USDC_ETH_ADDRESS, signer.address],
-    };
-
-    const revertOptions = {
-      abortAddress: "0x0000000000000000000000000000000000000000", // not used
-      callOnRevert: args.revertOptions.callOnRevert,
-      onRevertGasLimit: args.revertOptions.onRevertGasLimit,
-      revertAddress: args.revertOptions.revertAddress,
-      revertMessage: hre.ethers.utils.hexlify(
-        hre.ethers.utils.toUtf8Bytes(args.revertOptions.revertMessage)
-      ),
-    };
-
-    // Prepare encoded parameters for the call
-    const valuesArray = args.values.map((value, index) => {
-      const type = args.types[index];
-      if (type === "bool") {
-        try {
-          return JSON.parse(value.toLowerCase());
-        } catch (e) {
-          throw new Error(`Invalid boolean value: ${value}`);
-        }
-      } else if (type.startsWith("uint") || type.startsWith("int")) {
-        return hre.ethers.BigNumber.from(value);
-      } else {
-        return value;
-      }
-    });
-
-    const encodedParameters = hre.ethers.utils.defaultAbiCoder.encode(
-      args.types,
-      valuesArray
-    );
-
-    const tx = await dustTokens.TestGatewayDepositAndCall(
-      universalApp.address,
-      encodedParameters,
-      revertOptions,
+    // Step 3: Create input token swaps
+    const swaps: TokenSwap[] = [
       {
-        value: depositAmount,
-      }
-    );
-    await tx.wait();
-
-    expect(tx).not.reverted;
-
-    // Wait for 1 second
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Check if USDC balance has increased
-    const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
-    const UsdcBalanceAfter = Number(
-      hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
-    );
-    const UsdcBalanceBefore = startBalances["usdc"];
-    const UsdcDiff = UsdcBalanceAfter - UsdcBalanceBefore;
-
-    console.log(
-      `USDC balance - Before: ${UsdcBalanceBefore}, After: ${UsdcBalanceAfter}, Diff: ${UsdcDiff}`
-    );
-
-    expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
-  });
-
-  it.only("SwapAndBridgeTokens", async function () {
-    const args = {
-      amount: "10",
-      erc20: null,
-      gatewayEvm: GATEWAY_ADDRESS,
-      receiver: universalApp.address,
-      revertOptions: {
-        callOnRevert: false,
-        onRevertGasLimit: 7000000,
-        revertAddress: "0x0000000000000000000000000000000000000000",
-        revertMessage: "0x",
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: DAI.address,
       },
-      txOptions: {
-        gasLimit: 1000000,
-        gasPrice: {
-          hex: "0x3b9aca00",
-          type: "BigNumber",
-        },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: LINK.address,
       },
-      types: ["address", "bytes"],
-      values: [ZETA_USDC_ETH_ADDRESS, signer.address],
-    };
-
-    const revertOptions = {
-      abortAddress: "0x0000000000000000000000000000000000000000", // not used
-      callOnRevert: args.revertOptions.callOnRevert,
-      onRevertGasLimit: args.revertOptions.onRevertGasLimit,
-      revertAddress: args.revertOptions.revertAddress,
-      revertMessage: hre.ethers.utils.hexlify(
-        hre.ethers.utils.toUtf8Bytes(args.revertOptions.revertMessage)
-      ),
-    };
-
-    // Prepare encoded parameters for the call
-    const valuesArray = args.values.map((value, index) => {
-      const type = args.types[index];
-      if (type === "bool") {
-        try {
-          return JSON.parse(value.toLowerCase());
-        } catch (e) {
-          throw new Error(`Invalid boolean value: ${value}`);
-        }
-      } else if (type.startsWith("uint") || type.startsWith("int")) {
-        return hre.ethers.BigNumber.from(value);
-      } else {
-        return value;
-      }
-    });
-
-    const encodedParameters = hre.ethers.utils.defaultAbiCoder.encode(
-      args.types,
-      valuesArray
-    );
-
-    // Tokens lists
-    // ERC-20 Contracts to be swapped, with their names
-    const ercContracts = [
-      { amount: "100", contract: DAI, decimals: DAI_DECIMALS, name: "DAI" },
-      { amount: "1", contract: LINK, decimals: DAI_DECIMALS, name: "LINK" }, // Assuming LINK uses the same decimals as DAI
-      { amount: "6", contract: UNI, decimals: DAI_DECIMALS, name: "UNI" }, // Assuming LINK uses the same decimals as DAI
-      //   { contract: WBTC, decimals: DAI_DECIMALS, name: "WBTC" }, // Assuming LINK uses the same decimals as DAI
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: UNI.address,
+      },
     ];
 
-    // Approve the MultiSwap contract to spend tokens
-    for (const { amount, name, contract, decimals } of ercContracts) {
-      const formattedAmount = hre.ethers.utils.parseUnits(amount, decimals);
+    // Step 4: Approve tokens
+    await approveTokens(swaps);
 
-      const approveTx = await contract.approve(
-        dustTokens.address,
-        formattedAmount
-      );
-      await approveTx.wait();
-
-      console.log(`${name} approved for MultiSwap`);
-    }
-
-    // Check Initial Balances
-    const beforeBalances = {};
-    for (const { name, contract, decimals } of ercContracts) {
-      const balance = await contract.balanceOf(signer.address);
-      beforeBalances[name] = Number(
-        hre.ethers.utils.formatUnits(balance, decimals)
-      );
-    }
-
-    // Execute the swap
-    type TokenSwap = {
-      amount: BigNumber;
-      token: string;
-    };
-    const tokenSwaps: TokenSwap[] = ercContracts.map(
-      ({ amount, decimals, contract }) => {
-        const formattedAmount = hre.ethers.utils.parseUnits(amount, decimals);
-        const token: TokenSwap = {
-          amount: formattedAmount,
-          token: contract.address,
-        };
-        return token;
-      }
+    // Step 5: Save the start balance of the receiver
+    const receiverStartBalance = await outputTokenContract.balanceOf(
+      receiver.address
     );
 
-    // console.log("Token Swaps:", tokenSwaps);
+    // Step 6: Execute SwapAndBridgeTokens
+    const revertOptions = {
+      abortAddress: "0x0000000000000000000000000000000000000000", // not used
+      callOnRevert: false,
+      onRevertGasLimit: 7000000,
+      revertAddress: "0x0000000000000000000000000000000000000000",
+      revertMessage: hre.ethers.utils.hexlify(
+        hre.ethers.utils.toUtf8Bytes("0x")
+      ),
+    };
 
     const tx = await dustTokens.SwapAndBridgeTokens(
-      tokenSwaps,
+      swaps,
       universalApp.address,
       encodedParameters,
       revertOptions
     );
     const receipt = await tx.wait();
 
-    // Check that the receipt includes the event SwappedAndDeposited
-    const event = receipt.events?.find(
+    // Step 7: Check that the receipt includes the event SwappedAndDeposited
+    const depositEvent = receipt.events?.find(
       (e) => e.event === "SwappedAndDeposited"
     );
 
     expect(tx).not.reverted;
-    expect(event).exist;
+    expect(depositEvent).exist;
 
-    const totalTokensDeposited = hre.ethers.utils.formatEther(event?.args[2]);
-    console.log("Swap Event: ", totalTokensDeposited);
+    // Wait for 5 second
+    await new Promise((resolve) => setTimeout(resolve, 5000));
 
-    // // Wait for 1 second
-    // await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Step 8: Check the receiver's balance for the output token
+    const receiverBalance = await outputTokenContract.balanceOf(
+      receiver.address
+    );
 
-    // // Check if USDC balance has increased
-    // const expandedUSDCBalanceAfter = await USDC.balanceOf(signer.address);
-    // const UsdcBalanceAfter = Number(
-    //   hre.ethers.utils.formatUnits(expandedUSDCBalanceAfter, USDC_DECIMALS)
-    // );
-    // const UsdcBalanceBefore = startBalances["usdc"];
-    // const UsdcDiff = UsdcBalanceAfter - UsdcBalanceBefore;
-
-    // console.log(
-    //   `USDC balance - Before: ${UsdcBalanceBefore}, After: ${UsdcBalanceAfter}, Diff: ${UsdcDiff}`
-    // );
-
-    // expect(UsdcBalanceAfter).is.greaterThan(UsdcBalanceBefore);
+    expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
   });
 
-  it.only("Should handle multiple tokens correctly", async function () {
-    const token1 = DAI;
-    const token2 = LINK;
-    const token3 = UNI;
-    await dustTokens.addToken(token1.address);
-    await dustTokens.addToken(token2.address);
-    await dustTokens.addToken(token3.address);
+  it("Should swap input tokens and output native token on destination chain", async function () {
+    // Step 0: Output token
+    const outputTokenContractAddress =
+      "0x0000000000000000000000000000000000000000";
+
+    // Step 1: Create destination chain payload
+    const destinationPayload = encodeDestinationPayload(
+      receiver.address,
+      outputTokenContractAddress
+    );
+
+    // Step 2: Create Zetachain payload
+    const encodedParameters = encodeZetachainPayload(
+      ZETA_ETH_ADDRESS,
+      dustTokens.address,
+      destinationPayload
+    );
+
+    // Step 3: Create input token swaps
+    const swaps: TokenSwap[] = [
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: DAI.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: LINK.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: UNI.address,
+      },
+    ];
+
+    // Step 4: Approve tokens
+    await approveTokens(swaps);
+
+    // Step 5: Save the start balance of the receiver
+    const receiverStartBalance = await receiver.getBalance();
+
+    // Step 6: Execute SwapAndBridgeTokens
+    const revertOptions = {
+      abortAddress: "0x0000000000000000000000000000000000000000", // not used
+      callOnRevert: false,
+      onRevertGasLimit: 7000000,
+      revertAddress: "0x0000000000000000000000000000000000000000",
+      revertMessage: hre.ethers.utils.hexlify(
+        hre.ethers.utils.toUtf8Bytes("0x")
+      ),
+    };
+
+    const tx = await dustTokens.SwapAndBridgeTokens(
+      swaps,
+      universalApp.address,
+      encodedParameters,
+      revertOptions
+    );
+    const receipt = await tx.wait();
+
+    // Step 7: Check that the receipt includes the event SwappedAndDeposited
+    const depositEvent = receipt.events?.find(
+      (e) => e.event === "SwappedAndDeposited"
+    );
+
+    expect(tx).not.reverted;
+    expect(depositEvent).exist;
+
+    // Wait for 5 second
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Step 8: Check the receiver's balance for the output token
+    const receiverBalance = await receiver.getBalance();
+
+    expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
+  });
+
+  it("Should handle multiple tokens and balances", async function () {
+    const isDaiWhiteListed = await dustTokens.isTokenWhitelisted(DAI.address);
+    const isLinkWhiteListed = await dustTokens.isTokenWhitelisted(LINK.address);
+    const isUniWhiteListed = await dustTokens.isTokenWhitelisted(UNI.address);
+    const isWbtcWhiteListed = await dustTokens.isTokenWhitelisted(WBTC.address);
+
+    expect(isDaiWhiteListed).to.be.true;
+    expect(isLinkWhiteListed).to.be.true;
+    expect(isUniWhiteListed).to.be.true;
+    expect(isWbtcWhiteListed).to.be.true;
 
     let tokens = await dustTokens.getTokens();
     expect(tokens).to.deep.equal([
-      token1.address,
-      token2.address,
-      token3.address,
+      DAI.address,
+      LINK.address,
+      UNI.address,
+      WBTC.address,
     ]);
 
-    await dustTokens.removeToken(token1.address);
+    await dustTokens.removeToken(DAI.address);
 
-    tokens = await dustTokens.getTokens();
-    expect(tokens).to.deep.equal([token3.address, token2.address]);
+    const isDaiWhiteListedAfter = await dustTokens.isTokenWhitelisted(
+      DAI.address
+    );
+    const isLinkWhiteListedAfter = await dustTokens.isTokenWhitelisted(
+      LINK.address
+    );
+    const isUniWhiteListedAfter = await dustTokens.isTokenWhitelisted(
+      UNI.address
+    );
+    const isWbtcWhiteListedAfter = await dustTokens.isTokenWhitelisted(
+      WBTC.address
+    );
+
+    expect(isDaiWhiteListedAfter).to.be.false;
+    expect(isLinkWhiteListedAfter).to.be.true;
+    expect(isUniWhiteListedAfter).to.be.true;
+    expect(isWbtcWhiteListedAfter).to.be.true;
 
     const balances = await dustTokens.getBalances(signer.address);
-    console.log("Balances: ", balances);
+    expect(balances).to.deep.equal([
+      [WBTC.address, LINK.address, UNI.address],
+      [await WBTC.name(), await LINK.name(), await UNI.name()],
+      [await WBTC.symbol(), await LINK.symbol(), await UNI.symbol()],
+      [await WBTC.decimals(), await LINK.decimals(), await UNI.decimals()],
+      [
+        await WBTC.balanceOf(signer.address),
+        await LINK.balanceOf(signer.address),
+        await UNI.balanceOf(signer.address),
+      ],
+    ]);
   });
 });

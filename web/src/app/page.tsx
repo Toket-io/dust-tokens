@@ -31,8 +31,9 @@ import { Button } from "@/components/ui/button";
 import ArcherDemo from "@/components/ArcherDemo";
 import ContractsConfig from "../../../ContractsConfig";
 
-const universalAppAddress = "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E";
+const universalAppAddress = ContractsConfig.zeta_universalDapp;
 const hardhatAccount = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+const receiverAccount = "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC";
 const localhostProvider = new ethers.providers.JsonRpcProvider(
   "http://localhost:8545"
 );
@@ -250,7 +251,7 @@ const Page = () => {
     return tx;
   };
 
-  const handleDepositETH = async () => {
+  const handleDepositETH = async (receiver: string) => {
     const revertOptions: revertOptions = {
       revertAddress: "0x0000000000000000000000000000000000000000",
       callOnRevert: false,
@@ -262,7 +263,7 @@ const Page = () => {
       amount: "1",
       erc20: null,
       gatewayEvm: ContractsConfig.evm_gateway,
-      receiver: hardhatAccount,
+      receiver: receiver,
       revertOptions: revertOptions,
       txOptions: {
         gasLimit: 1000000,
@@ -271,7 +272,7 @@ const Page = () => {
     });
   };
 
-  const handleDepositUSDC = async () => {
+  const handleDepositUSDC = async (receiver: string) => {
     const revertOptions: revertOptions = {
       revertAddress: "0x0000000000000000000000000000000000000000",
       callOnRevert: false,
@@ -283,7 +284,7 @@ const Page = () => {
       amount: "1",
       erc20: ContractsConfig.evm_usdcToken,
       gatewayEvm: ContractsConfig.evm_gateway,
-      receiver: hardhatAccount,
+      receiver: receiver,
       revertOptions: revertOptions,
       txOptions: {
         gasLimit: 1000000,
@@ -335,6 +336,20 @@ const Page = () => {
               contractAddress={ContractsConfig.evm_usdcToken}
               account={hardhatAccount}
             />
+            <Erc20Balance
+              contractAddress={"0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0"}
+              account={hardhatAccount}
+            />
+            <h1 className="text-3xl font-bold mt-6">Receiver</h1>
+            <Erc20Balance account={receiverAccount} />
+            <Erc20Balance
+              contractAddress={evmAddresses.usdc}
+              account={receiverAccount}
+            />
+            <Erc20Balance
+              contractAddress={"0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0"}
+              account={receiverAccount}
+            />
 
             <h1 className="text-3xl font-bold mt-6">Gateway</h1>
             <Erc20Balance account={ContractsConfig.evm_gateway} />
@@ -343,13 +358,26 @@ const Page = () => {
               account={ContractsConfig.evm_gateway}
             />
             <div className="mt-2">
-              <Button size="sm" className="mr-2" onClick={handleDepositETH}>
+              <Button
+                size="sm"
+                className="mr-2"
+                onClick={() => handleDepositETH(hardhatAccount)}
+              >
                 Deposit 1 ETH
               </Button>
-              <Button size="sm" onClick={handleDepositUSDC}>
+              <Button
+                size="sm"
+                onClick={() => handleDepositUSDC(hardhatAccount)}
+              >
                 Deposit 1 USDC
               </Button>
             </div>
+            <h1 className="text-3xl font-bold mt-6">Dust Tokens</h1>
+            <Erc20Balance account={ContractsConfig.evmDapp} />
+            <Erc20Balance
+              contractAddress={ContractsConfig.evm_usdcToken}
+              account={ContractsConfig.evmDapp}
+            />
 
             <h1 className="text-3xl font-bold mt-6">TSS</h1>
             <Erc20Balance account={ContractsConfig.evm_tss} />
@@ -376,6 +404,10 @@ const Page = () => {
               contractAddress={ContractsConfig.zeta_usdcEthToken}
               account={hardhatAccount}
             />
+            <Erc20Balance
+              contractAddress={ContractsConfig.zeta_zetaToken}
+              account={hardhatAccount}
+            />
 
             <h1 className="text-3xl font-bold mt-6">Gateway</h1>
             <Erc20Balance
@@ -388,14 +420,30 @@ const Page = () => {
             />
 
             <h1 className="text-3xl font-bold mt-6">My Universal App</h1>
-            <Erc20Balance account={universalAppAddress} />
             <Erc20Balance
               contractAddress={ContractsConfig.zeta_usdcEthToken}
               account={universalAppAddress}
             />
             <div className="mt-2">
-              <Button size="sm" className="mr-2" onClick={handleSwapFromEth}>
+              {/* <Button size="sm" className="mr-2" onClick={handleSwapFromEth}>
                 Swap 10 ETH to USDC
+              </Button> */}
+              <Button
+                size="sm"
+                className="mr-2"
+                onClick={() =>
+                  handleDepositETH(ContractsConfig.zeta_universalDapp)
+                }
+              >
+                Deposit 1 ETH
+              </Button>
+              <Button
+                size="sm"
+                onClick={() =>
+                  handleDepositUSDC(ContractsConfig.zeta_universalDapp)
+                }
+              >
+                Deposit 1 USDC
               </Button>
             </div>
 
