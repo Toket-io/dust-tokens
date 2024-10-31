@@ -424,10 +424,6 @@ describe("EvmDustTokens", function () {
   });
 
   it("Should handle multiple tokens and balances", async function () {
-    await dustTokens.addToken(DAI.address);
-    await dustTokens.addToken(LINK.address);
-    await dustTokens.addToken(UNI.address);
-
     const isDaiWhiteListed = await dustTokens.isTokenWhitelisted(DAI.address);
     const isLinkWhiteListed = await dustTokens.isTokenWhitelisted(LINK.address);
     const isUniWhiteListed = await dustTokens.isTokenWhitelisted(UNI.address);
