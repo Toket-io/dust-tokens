@@ -343,7 +343,7 @@ const Page = () => {
             <h1 className="text-3xl font-bold mt-6">Receiver</h1>
             <Erc20Balance account={receiverAccount} />
             <Erc20Balance
-              contractAddress={evmAddresses.usdc}
+              contractAddress={ContractsConfig.evm_usdcToken}
               account={receiverAccount}
             />
             <Erc20Balance

@@ -69,22 +69,23 @@ export type SelectedToken = Token & {
   isMax: boolean;
 };
 
-// const tokens = [
-//   { value: "btc", label: "Bitcoin (BTC)", balance: 0.5 },
-//   { value: "eth", label: "Ethereum (ETH)", balance: 2.3 },
-//   { value: "usdt", label: "Tether (USDT)", balance: 1000 },
-//   { value: "bnb", label: "Binance Coin (BNB)", balance: 10 },
-//   { value: "usdc", label: "USD Coin (USDC)", balance: 500 },
-//   { value: "xrp", label: "Ripple (XRP)", balance: 0 },
-//   { value: "ada", label: "Cardano (ADA)", balance: 0 },
-//   { value: "doge", label: "Dogecoin (DOGE)", balance: 1000 },
-// ];
+export type Network = {
+  value: string;
+  label: string;
+  enabled: boolean;
+  rpc: string;
+};
 
-const networks = [
-  { value: "ethereum", label: "Ethereum (ETH)", enabled: true },
-  { value: "binance", label: "Binance Smart Chain", enabled: false },
-  { value: "polygon", label: "Polygon", enabled: false },
-  { value: "solana", label: "Solana", enabled: false },
+const networks: Network[] = [
+  {
+    value: "ethereum",
+    label: "Ethereum",
+    enabled: true,
+    rpc: "http://localhost:8545",
+  },
+  { value: "binance", label: "Binance Smart Chain", enabled: false, rpc: "" },
+  { value: "polygon", label: "Polygon", enabled: false, rpc: "" },
+  { value: "solana", label: "Solana", enabled: false, rpc: "" },
 ];
 
 // Replace with your deployed contract's address and ABI
@@ -106,6 +107,7 @@ export default function Component() {
   // const [provider, setProvider] = useState(null);
   const [contract, setContract] = useState(null);
   const [balances, setBalances] = useState<Token[]>([]);
+  const [outputBalances, setOutputBalances] = useState<Token[]>([]);
   const [loading, setLoading] = useState(false);
   const [transactionPending, setTransactionPending] = useState(false);
   const [totalEthOutput, setTotalEthOutput] = useState<string>("");
@@ -113,10 +115,7 @@ export default function Component() {
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<SelectedToken[]>([]);
-  const [selectedNetwork, setSelectedNetwork] = useState<{
-    value: string;
-    label: string;
-  } | null>(null);
+  const [selectedNetwork, setSelectedNetwork] = useState<Network | null>(null);
 
   useEffect(() => {
     const initializeProvider = async () => {
@@ -131,6 +130,14 @@ export default function Component() {
 
     initializeProvider();
   }, []);
+
+  useEffect(() => {
+    if (selectedNetwork) {
+      fetchOutputBalances();
+    } else {
+      setOutputBalances([]);
+    }
+  }, [selectedNetwork]);
 
   const handleSwapConfirm = async () => {
     setTransactionPending(true);
@@ -201,6 +208,45 @@ export default function Component() {
         ),
       }));
       setBalances(formattedBalances);
+    } catch (error) {
+      console.error("Error fetching balances:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchOutputBalances = async () => {
+    try {
+      setLoading(true);
+
+      console.log("Selected network:", selectedNetwork);
+
+      const localhostProvider = new ethers.providers.JsonRpcProvider(
+        selectedNetwork!.rpc
+      );
+
+      // Create a read-only contract instance by passing only the provider
+      const contractInstance = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        localhostProvider
+      );
+
+      const [addresses, names, symbols, decimals, tokenBalances] =
+        await contractInstance.getBalances(signer.address);
+      const formattedBalances: Token[] = addresses.map((address, index) => ({
+        address,
+        name: names[index],
+        symbol: symbols[index],
+        decimals: decimals[index],
+        balance: Number(
+          ethers.utils.formatUnits(tokenBalances[index], decimals[index])
+        ),
+      }));
+
+      console.log("Output balances:", formattedBalances);
+
+      setOutputBalances(formattedBalances);
     } catch (error) {
       console.error("Error fetching balances:", error);
     } finally {
@@ -556,8 +602,17 @@ export default function Component() {
           </div>
 
           {/* Additional element to the right of the root */}
-          <div style={columnStyle}>
-            <ArcherElement id="right-element">
+          <div style={columnStyle} className="space-y-16">
+            <ArcherElement
+              id="right-element"
+              relations={[
+                {
+                  targetId: "select-output-token",
+                  targetAnchor: "top",
+                  sourceAnchor: "bottom",
+                },
+              ]}
+            >
               <div>
                 <Popover open={openNetwork} onOpenChange={setOpenNetwork}>
                   <PopoverTrigger asChild>
@@ -600,6 +655,24 @@ export default function Component() {
                     </Command>
                   </PopoverContent>
                 </Popover>
+              </div>
+            </ArcherElement>
+            <ArcherElement id="select-output-token">
+              <div>
+                <Card className="rounded-2xl items-start w-64">
+                  <CardContent>
+                    <div className="items-center w-full pt-6 space-y-2">
+                      <Button
+                        variant="primary"
+                        size="full"
+                        onClick={handleSwapConfirm}
+                        disabled={loading || transactionPending}
+                      >
+                        Swap
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </ArcherElement>
           </div>
