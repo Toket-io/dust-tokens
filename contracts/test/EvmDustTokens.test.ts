@@ -257,14 +257,7 @@ describe("EvmDustTokens", function () {
   });
 
   // MARK: Tests
-  it("Test balance of UNI", async function () {
-    const balance = await UNI.balanceOf(signer.address);
-    const formatedBalance = hre.ethers.utils.formatUnits(balance, DAI_DECIMALS);
-
-    console.log("UNI balance:", formatedBalance);
-  });
-
-  it.only("SwapAndBridgeTokens", async function () {
+  it("Should swap input tokens and output specified token on destination chain", async function () {
     // Step 0: Output token
     const outputTokenContract = UNI;
 
@@ -339,6 +332,82 @@ describe("EvmDustTokens", function () {
     const receiverBalance = await outputTokenContract.balanceOf(
       receiver.address
     );
+
+    expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
+  });
+
+  it("Should swap input tokens and output native token on destination chain", async function () {
+    // Step 0: Output token
+    const outputTokenContractAddress =
+      "0x0000000000000000000000000000000000000000";
+
+    // Step 1: Create destination chain payload
+    const destinationPayload = encodeDestinationPayload(
+      receiver.address,
+      outputTokenContractAddress
+    );
+
+    // Step 2: Create Zetachain payload
+    const encodedParameters = encodeZetachainPayload(
+      ZETA_ETH_ADDRESS,
+      dustTokens.address,
+      destinationPayload
+    );
+
+    // Step 3: Create input token swaps
+    const swaps: TokenSwap[] = [
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: DAI.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: LINK.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: UNI.address,
+      },
+    ];
+
+    // Step 4: Approve tokens
+    await approveTokens(swaps);
+
+    // Step 5: Save the start balance of the receiver
+    const receiverStartBalance = await receiver.getBalance();
+
+    // Step 6: Execute SwapAndBridgeTokens
+    const revertOptions = {
+      abortAddress: "0x0000000000000000000000000000000000000000", // not used
+      callOnRevert: false,
+      onRevertGasLimit: 7000000,
+      revertAddress: "0x0000000000000000000000000000000000000000",
+      revertMessage: hre.ethers.utils.hexlify(
+        hre.ethers.utils.toUtf8Bytes("0x")
+      ),
+    };
+
+    const tx = await dustTokens.SwapAndBridgeTokens(
+      swaps,
+      universalApp.address,
+      encodedParameters,
+      revertOptions
+    );
+    const receipt = await tx.wait();
+
+    // Step 7: Check that the receipt includes the event SwappedAndDeposited
+    const depositEvent = receipt.events?.find(
+      (e) => e.event === "SwappedAndDeposited"
+    );
+
+    expect(tx).not.reverted;
+    expect(depositEvent).exist;
+
+    // Wait for 5 second
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Step 8: Check the receiver's balance for the output token
+    const receiverBalance = await receiver.getBalance();
 
     expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
   });
