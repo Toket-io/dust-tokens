@@ -18,7 +18,7 @@ const ZETA_SYSTEM_CONTRACT_ADDRESS: string =
 const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
 const ZETA_ETH_ADDRESS: string = ContractsConfig.zeta_ethEthToken;
 
-const WETH_ADDRESS: string | null = ContractsConfig.evm_weth;
+const WETH_ADDRESS: string = ContractsConfig.evm_weth ?? "";
 const DAI_ADDRESS: string = process.env.DAI_ADDRESS ?? "";
 const USDC_ADDRESS: string = process.env.USDC_ADDRESS ?? "";
 const UNI_ADDRESS = process.env.UNI_ADDRESS ?? "";
@@ -164,7 +164,7 @@ describe("EvmDustTokens", function () {
     dustTokens = await evmDustTokensFactory.deploy(
       GATEWAY_ADDRESS,
       UNISWAP_ROUTER,
-      WETH.address,
+      WETH_ADDRESS,
       signer.address
     );
     await dustTokens.deployed();
