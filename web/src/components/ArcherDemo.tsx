@@ -796,19 +796,6 @@ export default function Component() {
         open={showSuccess}
         setOpen={setShowSuccess}
       />
-      {/* <div>
-        <h3>Balances</h3>
-        <ul>
-          {balances.map(({ address, name, symbol, decimals, balance }) => (
-            <li key={address}>
-              <strong>
-                {name} ({symbol})
-              </strong>
-              : {balance} (Decimals: {decimals})
-            </li>
-          ))}
-        </ul>
-      </div> */}
     </div>
   );
 }
