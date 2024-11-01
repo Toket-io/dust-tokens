@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
-import { ethers } from "ethers";
+import { BigNumber, ethers } from "ethers";
 import { signer } from "@/app/page";
 import ContractsConfig from "../../../ContractsConfig";
 import { SwapSuccessDrawer } from "./SwapSuccessDrawer";
@@ -48,12 +48,6 @@ const rootContainerStyle = {
   alignItems: "center",
   justifyContent: "center",
   flex: 1,
-};
-
-const boxStyle = {
-  padding: "10px",
-  border: "1px solid black",
-  marginBottom: "20px",
 };
 
 export interface Token {
@@ -121,6 +115,7 @@ const CONTRACT_ABI = [
   "function getTokens() view returns (address[], string[], string[], uint8[])",
   "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions) public",
   "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
+  "event SwappedAndWithdrawn(address indexed receiver, address outputToken, uint256 totalTokensReceived)",
 ];
 
 const UNIVERSAL_APP_ADDRESS = "0xD516492bb58F07bc91c972DCCB2DF654653d4D33";
@@ -171,9 +166,7 @@ export default function Component() {
     setTransactionPending(true);
     await handleApproves();
     await handleSwapAndBridge();
-    await new Promise((resolve) => setTimeout(resolve, 2000));
     setTransactionPending(false);
-    setShowSuccess(true);
   };
 
   const handleSelectToken = (token: Token) => {
@@ -375,47 +368,37 @@ export default function Component() {
     try {
       setTransactionPending(true);
 
-      if (!UNIVERSAL_APP_ADDRESS) {
-        throw new Error("UNIVERSAL_APP_ADDRESS is not defined");
+      // Validation checks
+      if (
+        !UNIVERSAL_APP_ADDRESS ||
+        !ZETA_USDC_ETH_ADDRESS ||
+        !signer ||
+        !signer.address ||
+        !selectedNetwork ||
+        !selectedOutputToken
+      ) {
+        throw new Error(
+          "Required parameters are missing or not properly initialized"
+        );
       }
 
-      if (!ZETA_USDC_ETH_ADDRESS) {
-        throw new Error("ZETA_USDC_ETH_ADDRESS is not defined");
-      }
-
-      if (!signer || !signer.address) {
-        throw new Error("Signer or signer address is not properly initialized");
-      }
-
-      if (!selectedNetwork) {
-        throw new Error("Selected network is not defined");
-      }
-
-      if (!selectedOutputToken) {
-        throw new Error("Selected output token is not defined");
-      }
-
-      // Step 1: Create destination chain payload
+      // Step 1: Prepare payloads
       const destinationPayload = encodeDestinationPayload(
         signer.address,
         selectedOutputToken.address
       );
-
-      // Step 2: Create Zetachain payload
       const encodedParameters = encodeZetachainPayload(
         selectedNetwork.zrc20Address,
         selectedNetwork.contractAddress,
         destinationPayload
       );
-
       const revertOptions = {
-        abortAddress: "0x0000000000000000000000000000000000000000", // not used
+        abortAddress: "0x0000000000000000000000000000000000000000",
         callOnRevert: false,
         onRevertGasLimit: 7000000,
         revertAddress: "0x0000000000000000000000000000000000000000",
         revertMessage: ethers.utils.hexlify(ethers.utils.toUtf8Bytes("0x")),
       };
-
       const tokenSwaps = selectedTokens.map(
         ({ amount, decimals, address }) => ({
           amount: ethers.utils.parseUnits(amount, decimals),
@@ -423,57 +406,71 @@ export default function Component() {
         })
       );
 
+      // Create contract instance
       const contractInstance = new ethers.Contract(
         CONTRACT_ADDRESS,
         CONTRACT_ABI,
         signer
       );
 
+      // Step 2: Perform swap and bridge transaction
       const tx = await contractInstance.SwapAndBridgeTokens(
         tokenSwaps,
         UNIVERSAL_APP_ADDRESS,
         encodedParameters,
         revertOptions
       );
+      console.log("Transaction submitted:", tx.hash);
 
-      const receipt = await tx.wait();
+      // Step 3: Listen for the final 'SwappedAndWithdrawn' event to mark success
+      const localhostProvider = new ethers.providers.JsonRpcProvider(
+        selectedNetwork.rpc
+      );
+      const readOnlyContractInstance = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        localhostProvider
+      );
 
-      console.log("Transaction successful:", receipt);
-      // Search for the specific event by name
+      const onSwappedAndWithdrawn = (executor, outputToken, outputAmount) => {
+        if (executor.toLowerCase() === signer.address.toLowerCase()) {
+          // Filter based on signer
+          console.log("SwappedAndWithdrawn event detected for signer!");
+          console.log("Executor:", executor);
+          console.log("outputToken:", outputToken);
+          console.log("outputAmount:", outputAmount);
 
-      // Filter and decode the SwappedAndDeposited event
-      receipt.events.forEach((event) => {
-        if (event.event === "SwappedAndDeposited") {
-          console.log("SwappedAndDeposited event detected!");
+          // Mark transaction as complete and show success
+          setTransactionPending(false);
+          setShowSuccess(true);
 
-          // Decode event arguments
-          const decoded = contractInstance.interface.decodeEventLog(
-            "SwappedAndDeposited",
-            event.data,
-            event.topics
+          // Remove the event listener to avoid memory leaks
+          readOnlyContractInstance.off(
+            "SwappedAndWithdrawn",
+            onSwappedAndWithdrawn
           );
-
-          console.log("Executor:", decoded.executor);
-          const totalEther = ethers.utils.formatEther(
-            decoded.totalTokensReceived
-          );
-          setTotalEthOutput(totalEther);
-          console.log("Total Tokens Received:", totalEther);
-          console.log("Swaps:", decoded.swaps);
-
-          decoded.swaps.forEach((swap, index) => {
-            console.log(`Swap ${index + 1}:`);
-            console.log(`  Token In: ${swap.tokenIn}`);
-            console.log(`  Token Out: ${swap.tokenOut}`);
-            console.log(`  Amount In: ${swap.amountIn.toString()}`);
-            console.log(`  Amount Out: ${swap.amountOut.toString()}`);
-          });
         }
-      });
+      };
+
+      // Attach the event listener for the final completion
+      readOnlyContractInstance.on("SwappedAndWithdrawn", onSwappedAndWithdrawn);
+
+      // Optional: Attach listener for SwappedAndDeposited if intermediate status updates are needed
+      contractInstance.on(
+        "SwappedAndDeposited",
+        (executor, swaps, totalTokensReceived) => {
+          if (executor.toLowerCase() === signer.address.toLowerCase()) {
+            // Filter based on signer
+            console.log("SwappedAndDeposited event detected for signer!");
+            const totalEther = ethers.utils.formatEther(totalTokensReceived);
+            setTotalEthOutput(totalEther);
+            console.log("Total Tokens Received:", totalEther);
+          }
+        }
+      );
     } catch (error) {
       console.error("Swap and bridge failed:", error);
-    } finally {
-      // setTransactionPending(false);
+      setTransactionPending(false);
     }
   };
 
@@ -639,7 +636,7 @@ export default function Component() {
               id="root"
               relations={[
                 {
-                  targetId: "right-element",
+                  targetId: "center-element",
                   targetAnchor: "left",
                   sourceAnchor: "right",
                 },
@@ -660,9 +657,6 @@ export default function Component() {
                     className="relative inline-flex rounded-full h-32 w-32"
                   />
                 </span>
-                {/* <h1 className="text-2xl text-center font-bold mt-2">
-                  Zetachain
-                </h1> */}
               </div>
             </ArcherElement>
           </div>
@@ -670,7 +664,7 @@ export default function Component() {
           {/* Additional element to the right of the root */}
           <div style={columnStyle} className="space-y-16">
             <ArcherElement
-              id="right-element"
+              id="center-element"
               relations={[
                 {
                   targetId: "select-output-token",
