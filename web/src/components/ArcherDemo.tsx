@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
-import { Check, ChevronsUpDown, Coins, X } from "lucide-react";
+import { Check, ChevronsUpDown, Coins, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ArcherContainer, ArcherElement } from "react-archer";
 import {
@@ -25,6 +25,7 @@ import { BigNumber, ethers } from "ethers";
 import { signer } from "@/app/page";
 import ContractsConfig from "../../../ContractsConfig";
 import { SwapSuccessDrawer } from "./SwapSuccessDrawer";
+import { toast } from "sonner";
 
 const containerStyle = {
   display: "flex",
@@ -132,13 +133,15 @@ export default function Component() {
   );
   const [loading, setLoading] = useState(false);
   const [transactionPending, setTransactionPending] = useState(false);
-  const [totalEthOutput, setTotalEthOutput] = useState<string>("");
   const [showSuccess, setShowSuccess] = useState<boolean>(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
   const [openOutputToken, setOpenOutputToken] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<SelectedToken[]>([]);
   const [selectedNetwork, setSelectedNetwork] = useState<Network | null>(null);
+  const [transactionStatus, setTransactionStatus] = useState<
+    "source" | "zeta" | "destination" | null
+  >(null);
 
   useEffect(() => {
     const initializeProvider = async () => {
@@ -166,7 +169,6 @@ export default function Component() {
     setTransactionPending(true);
     await handleApproves();
     await handleSwapAndBridge();
-    setTransactionPending(false);
   };
 
   const handleSelectToken = (token: Token) => {
@@ -217,6 +219,15 @@ export default function Component() {
           : token
       )
     );
+  };
+
+  const handleReset = () => {
+    setSelectedTokens([]);
+    setSelectedOutputToken(null);
+    setSelectedNetwork(null);
+    setTransactionStatus(null);
+    setTransactionResult(null);
+    setShowSuccess(false);
   };
 
   const fetchBalances = async (contractInstance) => {
@@ -422,6 +433,25 @@ export default function Component() {
       );
       console.log("Transaction submitted:", tx.hash);
 
+      setTransactionStatus("source");
+
+      // Optional: Attach listener for SwappedAndDeposited if intermediate status updates are needed
+      contractInstance.on(
+        "SwappedAndDeposited",
+        (executor, swaps, totalTokensReceived) => {
+          if (executor.toLowerCase() === signer.address.toLowerCase()) {
+            // Filter based on signer
+            if (transactionStatus === "source") {
+              setTransactionStatus("zeta");
+            }
+
+            console.log("SwappedAndDeposited event detected for signer!");
+            const totalEther = ethers.utils.formatEther(totalTokensReceived);
+            console.log("Total Tokens Received:", totalEther);
+          }
+        }
+      );
+
       // Step 3: Listen for the final 'SwappedAndWithdrawn' event to mark success
       const localhostProvider = new ethers.providers.JsonRpcProvider(
         selectedNetwork.rpc
@@ -436,12 +466,22 @@ export default function Component() {
         if (executor.toLowerCase() === signer.address.toLowerCase()) {
           // Filter based on signer
           console.log("SwappedAndWithdrawn event detected for signer!");
-          console.log("Executor:", executor);
-          console.log("outputToken:", outputToken);
-          console.log("outputAmount:", outputAmount);
+          const formattedAmount = ethers.utils.formatUnits(
+            outputAmount,
+            selectedOutputToken.decimals
+          );
 
           // Mark transaction as complete and show success
           setTransactionPending(false);
+          setTransactionStatus("destination");
+          toast.success(
+            "Your tokens have been successfully swapped and bridged!",
+            {
+              description: `You have received: ${formattedAmount} ${selectedOutputToken.symbol}`,
+              position: "top-center",
+              duration: 8000,
+            }
+          );
           setShowSuccess(true);
 
           // Remove the event listener to avoid memory leaks
@@ -454,20 +494,6 @@ export default function Component() {
 
       // Attach the event listener for the final completion
       readOnlyContractInstance.on("SwappedAndWithdrawn", onSwappedAndWithdrawn);
-
-      // Optional: Attach listener for SwappedAndDeposited if intermediate status updates are needed
-      contractInstance.on(
-        "SwappedAndDeposited",
-        (executor, swaps, totalTokensReceived) => {
-          if (executor.toLowerCase() === signer.address.toLowerCase()) {
-            // Filter based on signer
-            console.log("SwappedAndDeposited event detected for signer!");
-            const totalEther = ethers.utils.formatEther(totalTokensReceived);
-            setTotalEthOutput(totalEther);
-            console.log("Total Tokens Received:", totalEther);
-          }
-        }
-      );
     } catch (error) {
       console.error("Swap and bridge failed:", error);
       setTransactionPending(false);
@@ -657,6 +683,39 @@ export default function Component() {
                     className="relative inline-flex rounded-full h-32 w-32"
                   />
                 </span>
+
+                {transactionStatus && (
+                  <div className="flex items-center justify-center mt-4">
+                    <div className="flex items-center space-x-2">
+                      <div
+                        className={cn(
+                          "h-4 w-4 rounded-full",
+                          ["source", "zeta", "destination"].includes(
+                            transactionStatus
+                          )
+                            ? "bg-green-400"
+                            : "bg-gray-300"
+                        )}
+                      ></div>
+                      <div
+                        className={cn(
+                          "h-4 w-4 rounded-full",
+                          ["zeta", "destination"].includes(transactionStatus)
+                            ? "bg-green-400"
+                            : "bg-gray-300"
+                        )}
+                      ></div>
+                      <div
+                        className={cn(
+                          "h-4 w-4 rounded-full",
+                          transactionStatus === "destination"
+                            ? "bg-green-400"
+                            : "bg-gray-300"
+                        )}
+                      ></div>
+                    </div>
+                  </div>
+                )}
               </div>
             </ArcherElement>
           </div>
@@ -777,19 +836,27 @@ export default function Component() {
         </div>
       </ArcherContainer>
       <div className="flex items-center justify-center mt-4">
-        <SwapPreviewDrawer
-          selectedTokens={selectedTokens}
-          selectedNetwork={selectedNetwork}
-          selectedOutputToken={selectedOutputToken}
-          onConfirm={handleSwapConfirm}
-        />
+        {transactionStatus === "destination" ? (
+          <Button size="lg" onClick={handleReset}>
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reset
+          </Button>
+        ) : (
+          <SwapPreviewDrawer
+            selectedTokens={selectedTokens}
+            selectedNetwork={selectedNetwork}
+            selectedOutputToken={selectedOutputToken}
+            disabled={loading || transactionPending}
+            onConfirm={handleSwapConfirm}
+          />
+        )}
       </div>
 
-      <SwapSuccessDrawer
-        totalEthOutput={totalEthOutput}
-        open={showSuccess}
+      {/* <SwapSuccessDrawer
+        transactionResult={transactionResult!}
+        open={showSuccess && transactionResult !== null}
         setOpen={setShowSuccess}
-      />
+      /> */}
     </div>
   );
 }

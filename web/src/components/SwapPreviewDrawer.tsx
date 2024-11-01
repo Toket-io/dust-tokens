@@ -40,6 +40,7 @@ type ProfileFormDrawerProps = {
   selectedTokens: SelectedToken[];
   selectedNetwork: Network | null;
   selectedOutputToken: Token | null;
+  disabled?: boolean;
   onConfirm: (selectedTokens: SelectedToken[]) => void;
 };
 
@@ -47,6 +48,7 @@ export function SwapPreviewDrawer({
   selectedTokens,
   selectedNetwork,
   selectedOutputToken,
+  disabled = false,
   onConfirm,
 }: ProfileFormDrawerProps) {
   const [open, setOpen] = React.useState(false);
@@ -73,7 +75,7 @@ export function SwapPreviewDrawer({
     return (
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button size="lg">
+          <Button size="lg" disabled={disabled}>
             <Coins className="w-4 h-4 mr-2" />
             Preview Swap
           </Button>
@@ -106,6 +108,7 @@ export function SwapPreviewDrawer({
           <DialogFooter className="flex flex-column mt-4">
             <Button
               variant="default"
+              disabled={disabled}
               loading={saving}
               size="full"
               onClick={handleConfirm}
@@ -114,6 +117,7 @@ export function SwapPreviewDrawer({
             </Button>
             <Button
               variant="outline"
+              disabled={disabled}
               size="full"
               onClick={() => setOpen(false)}
             >
@@ -128,7 +132,7 @@ export function SwapPreviewDrawer({
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <DrawerTrigger asChild>
-        <Button size="lg">
+        <Button size="lg" disabled={disabled}>
           <Coins className="w-4 h-4 mr-2" />
           Preview Swap
         </Button>
@@ -137,7 +141,9 @@ export function SwapPreviewDrawer({
         <div>Content</div>
         <DrawerFooter className="pt-2">
           <DrawerClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button disabled={disabled} variant="outline">
+              Cancel
+            </Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
