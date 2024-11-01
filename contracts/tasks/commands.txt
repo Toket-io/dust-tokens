@@ -1,15 +1,14 @@
 DustTokens deployed to: 0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF
-Universal App deployed to: 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2
-
+Universal App deployed to: 0xD516492bb58F07bc91c972DCCB2DF654653d4D33
 
 // WITHDRAW ETH
 npx hardhat hello-withdraw-and-call \
-  --contract 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --contract 0xD516492bb58F07bc91c972DCCB2DF654653d4D33 \
   --receiver 0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF \
   --zrc20 0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe \
   --function "hello(string)" \
   --network localhost \
-  --revert-address 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --revert-address 0xD516492bb58F07bc91c972DCCB2DF654653d4D33 \
   --revert-message 0x \
   --call-on-revert \
   --amount 1 \
@@ -17,12 +16,12 @@ npx hardhat hello-withdraw-and-call \
 
 // WITHDRAW ETH with Receiver
 npx hardhat hello-withdraw-and-call \
-  --contract 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --contract 0xD516492bb58F07bc91c972DCCB2DF654653d4D33 \
   --receiver 0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF \
   --zrc20 0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe \
   --function "helloAndTransfer(string,address)" \
   --network localhost \
-  --revert-address 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --revert-address 0xD516492bb58F07bc91c972DCCB2DF654653d4D33 \
   --revert-message 0x \
   --call-on-revert \
   --amount 1 \
@@ -31,12 +30,12 @@ npx hardhat hello-withdraw-and-call \
 
 // WITHDRAW and swap
 npx hardhat hello-withdraw-and-call \
-  --contract 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --contract 0xD516492bb58F07bc91c972DCCB2DF654653d4D33 \
   --receiver 0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF \
   --zrc20 0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe \
   --function "ReceiveTokens(address,address)" \
   --network localhost \
-  --revert-address 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --revert-address 0xD516492bb58F07bc91c972DCCB2DF654653d4D33 \
   --revert-message 0x \
   --call-on-revert \
   --amount 1 \
@@ -46,12 +45,12 @@ npx hardhat hello-withdraw-and-call \
 
 // WITHDRAW USDC
 npx hardhat hello-withdraw-and-call \
-  --contract 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --contract 0xD516492bb58F07bc91c972DCCB2DF654653d4D33 \
   --receiver 0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF \
   --zrc20 0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c \
   --function "hello(string)" \
   --network localhost \
-  --revert-address 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --revert-address 0xD516492bb58F07bc91c972DCCB2DF654653d4D33 \
   --revert-message 0x \
   --call-on-revert \
   --amount 1 \
@@ -60,7 +59,7 @@ npx hardhat hello-withdraw-and-call \
 ------------------------->>>>
 
 npx hardhat hello-call \
-  --contract 0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2 \
+  --contract 0xD516492bb58F07bc91c972DCCB2DF654653d4D33 \
   --receiver 0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF \
   --zrc20 0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe \
   --function "hello(string)" \

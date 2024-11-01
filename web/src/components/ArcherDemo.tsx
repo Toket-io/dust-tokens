@@ -74,6 +74,9 @@ export type Network = {
   label: string;
   enabled: boolean;
   rpc: string;
+  contractAddress: string;
+  zrc20Address: string;
+  nativeToken: Token;
 };
 
 const networks: Network[] = [
@@ -82,10 +85,31 @@ const networks: Network[] = [
     label: "Ethereum",
     enabled: true,
     rpc: "http://localhost:8545",
+    contractAddress: "0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF",
+    zrc20Address: ContractsConfig.zeta_ethEthToken,
+    nativeToken: {
+      name: "Ether (Native)",
+      symbol: "ETH",
+      decimals: 18,
+      balance: 0,
+      address: "0x0000000000000000000000000000000000000000",
+    },
   },
-  { value: "binance", label: "Binance Smart Chain", enabled: false, rpc: "" },
-  { value: "polygon", label: "Polygon", enabled: false, rpc: "" },
-  { value: "solana", label: "Solana", enabled: false, rpc: "" },
+  {
+    value: "binance",
+    label: "Binance Smart Chain",
+    enabled: false,
+    rpc: "",
+    contractAddress: "0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF",
+    zrc20Address: ContractsConfig.zeta_ethEthToken,
+    nativeToken: {
+      name: "Ether (Native)",
+      symbol: "ETH",
+      decimals: 18,
+      balance: 0,
+      address: "0x0000000000000000000000000000000000000000",
+    },
+  },
 ];
 
 // Replace with your deployed contract's address and ABI
@@ -99,7 +123,7 @@ const CONTRACT_ABI = [
   "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
 ];
 
-const UNIVERSAL_APP_ADDRESS = "0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2";
+const UNIVERSAL_APP_ADDRESS = "0xD516492bb58F07bc91c972DCCB2DF654653d4D33";
 
 const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
 
@@ -255,12 +279,69 @@ export default function Component() {
 
       console.log("Output balances:", formattedBalances);
 
+      // Add native token to the list of output balances
+      formattedBalances.push(selectedNetwork.nativeToken);
+
       setOutputBalances(formattedBalances);
     } catch (error) {
       console.error("Error fetching balances:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // MARK: Helper Functions
+  const encodeDestinationPayload = (
+    recipient: string,
+    outputToken: string
+  ): string => {
+    const destinationPayloadTypes = ["address", "address"];
+    const destinationFunctionParams = ethers.utils.defaultAbiCoder.encode(
+      destinationPayloadTypes,
+      [outputToken, recipient]
+    );
+
+    const functionName = "ReceiveTokens(address,address)";
+    const functionSignature = ethers.utils.id(functionName).slice(0, 10);
+    const destinationPayload = ethers.utils.hexlify(
+      ethers.utils.concat([functionSignature, destinationFunctionParams])
+    );
+
+    return destinationPayload;
+  };
+
+  const encodeZetachainPayload = (
+    outputChainToken: string,
+    destinationContract: string,
+    destinationPayload: string
+  ) => {
+    const args = {
+      types: ["address", "bytes", "bytes"],
+      values: [outputChainToken, destinationContract, destinationPayload],
+    };
+
+    // Prepare encoded parameters for the call
+    const valuesArray = args.values.map((value, index) => {
+      const type = args.types[index];
+      if (type === "bool") {
+        try {
+          return JSON.parse(value.toLowerCase());
+        } catch (e) {
+          throw new Error(`Invalid boolean value: ${value}`);
+        }
+      } else if (type.startsWith("uint") || type.startsWith("int")) {
+        return ethers.BigNumber.from(value);
+      } else {
+        return value;
+      }
+    });
+
+    const encodedParameters = ethers.utils.defaultAbiCoder.encode(
+      args.types,
+      valuesArray
+    );
+
+    return encodedParameters;
   };
 
   const handleApproves = async () => {
@@ -306,48 +387,33 @@ export default function Component() {
         throw new Error("Signer or signer address is not properly initialized");
       }
 
-      const args = {
-        revertOptions: {
-          callOnRevert: false,
-          onRevertGasLimit: 7000000,
-          revertAddress: "0x0000000000000000000000000000000000000000",
-          revertMessage: "0x",
-        },
-        types: ["address", "bytes"],
-        values: [ZETA_USDC_ETH_ADDRESS, signer.address],
-      };
+      if (!selectedNetwork) {
+        throw new Error("Selected network is not defined");
+      }
 
-      console.log("Selected tokens:", args);
+      if (!selectedOutputToken) {
+        throw new Error("Selected output token is not defined");
+      }
 
-      // Prepare encoded parameters for the call
-      const valuesArray = args.values.map((value, index) => {
-        const type = args.types[index];
-        if (type === "bool") {
-          try {
-            return JSON.parse(value.toLowerCase());
-          } catch (e) {
-            throw new Error(`Invalid boolean value: ${value}`);
-          }
-        } else if (type.startsWith("uint") || type.startsWith("int")) {
-          return ethers.BigNumber.from(value);
-        } else {
-          return value;
-        }
-      });
+      // Step 1: Create destination chain payload
+      const destinationPayload = encodeDestinationPayload(
+        signer.address,
+        selectedOutputToken.address
+      );
 
-      const encodedParameters = ethers.utils.defaultAbiCoder.encode(
-        args.types,
-        valuesArray
+      // Step 2: Create Zetachain payload
+      const encodedParameters = encodeZetachainPayload(
+        selectedNetwork.zrc20Address,
+        selectedNetwork.contractAddress,
+        destinationPayload
       );
 
       const revertOptions = {
         abortAddress: "0x0000000000000000000000000000000000000000", // not used
-        callOnRevert: args.revertOptions.callOnRevert,
-        onRevertGasLimit: args.revertOptions.onRevertGasLimit,
-        revertAddress: args.revertOptions.revertAddress,
-        revertMessage: ethers.utils.hexlify(
-          ethers.utils.toUtf8Bytes(args.revertOptions.revertMessage)
-        ),
+        callOnRevert: false,
+        onRevertGasLimit: 7000000,
+        revertAddress: "0x0000000000000000000000000000000000000000",
+        revertMessage: ethers.utils.hexlify(ethers.utils.toUtf8Bytes("0x")),
       };
 
       const tokenSwaps = selectedTokens.map(
@@ -357,21 +423,12 @@ export default function Component() {
         })
       );
 
-      console.log(
-        "TODOS LOS ARGS:",
-        tokenSwaps,
-        UNIVERSAL_APP_ADDRESS,
-        encodedParameters,
-        revertOptions
-      );
-
       const contractInstance = new ethers.Contract(
         CONTRACT_ADDRESS,
         CONTRACT_ABI,
         signer
       );
 
-      console.log("Contract:", await contractInstance.getTokens());
       const tx = await contractInstance.SwapAndBridgeTokens(
         tokenSwaps,
         UNIVERSAL_APP_ADDRESS,
