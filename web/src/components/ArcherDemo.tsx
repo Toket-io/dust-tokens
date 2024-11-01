@@ -729,6 +729,7 @@ export default function Component() {
         <SwapPreviewDrawer
           selectedTokens={selectedTokens}
           selectedNetwork={selectedNetwork}
+          selectedOutputToken={selectedOutputToken}
           onConfirm={handleSwapConfirm}
         />
       </div>

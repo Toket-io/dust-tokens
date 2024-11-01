@@ -34,20 +34,19 @@ import {
   Trash,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { SelectedToken } from "./ArcherDemo";
+import { Network, SelectedToken, Token } from "./ArcherDemo";
 
 type ProfileFormDrawerProps = {
   selectedTokens: SelectedToken[];
-  selectedNetwork: {
-    value: string;
-    label: string;
-  } | null;
+  selectedNetwork: Network | null;
+  selectedOutputToken: Token | null;
   onConfirm: (selectedTokens: SelectedToken[]) => void;
 };
 
 export function SwapPreviewDrawer({
   selectedTokens,
   selectedNetwork,
+  selectedOutputToken,
   onConfirm,
 }: ProfileFormDrawerProps) {
   const [open, setOpen] = React.useState(false);
@@ -100,7 +99,7 @@ export function SwapPreviewDrawer({
             </div>
             <div className="font-semibold">Output Network & Token:</div>
             <div className="flex justify-between items-center">
-              <span>{selectedNetwork?.label || "Not selected"}</span>
+              <span>{`${selectedOutputToken?.name} @ ${selectedNetwork?.label}`}</span>
               <span>{"Calculating..."}</span>
             </div>
           </div>
