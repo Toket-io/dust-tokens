@@ -25,7 +25,6 @@ import { abi as zerc20Abi } from "../abi/ZRC20.sol/ZRC20.json";
 import { ethers } from "ethers";
 import { useEffect, useState } from "react";
 import ForkCheck from "../components/ForkCheck";
-import TokenSwapSelector from "@/components/TokenSwapSelector";
 import { evmAddresses, zetaAddresses } from "@/zetachain";
 import { Button } from "@/components/ui/button";
 import ContractsConfig from "../../../ContractsConfig";
@@ -319,10 +318,6 @@ const Page = () => {
       <div className="flex justify-end gap-2 mb-10">
         <ConnectBitcoin />
         <ConnectButton label="Connect EVM" showBalance={true} />
-      </div>
-      {/* <Welcome /> */}
-      <div className="bg-white p-8">
-        <TokenSwapSelector />
       </div>
       <div className="flex justify-center items-center">
         <div className="flex flex-row space-x-6">
