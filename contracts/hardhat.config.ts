@@ -11,30 +11,15 @@ import "@zetachain/toolkit/tasks";
 import { getHardhatConfigNetworks } from "@zetachain/networks";
 import { HardhatUserConfig } from "hardhat/config";
 
-const forkingURL = process.env.FORKING_URL || "";
-
 const zetaHardhat = getHardhatConfigNetworks();
-// console.log("BEFORE: ", zetaHardhat["hardhat"]);
-zetaHardhat["hardhat"]["chainId"] = 31337;
-zetaHardhat["hardhat"]["forking"] = {
-  enabled: process.env.MAINNET_FORKING_ENABLED === "true",
-  url: forkingURL,
-};
-// console.log("AFTER: ", zetaHardhat["hardhat"]);
-// console.log("ALL: ", zetaHardhat);
 
 const config: HardhatUserConfig = {
   networks: {
     ...zetaHardhat,
     hardhat: {
-      // chainId: 31337,
-      forking: {
-        enabled: true,
-        url: forkingURL,
+      mining: {
+        interval: 5000,
       },
-      // mining: {
-      //   interval: 1000,
-      // },
     },
   },
   solidity: {
