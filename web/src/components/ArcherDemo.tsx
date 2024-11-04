@@ -125,7 +125,6 @@ const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
 
 export default function Component() {
   // const [provider, setProvider] = useState(null);
-  const [contract, setContract] = useState(null);
   const [balances, setBalances] = useState<Token[]>([]);
   const [outputBalances, setOutputBalances] = useState<Token[]>([]);
   const [selectedOutputToken, setSelectedOutputToken] = useState<Token | null>(
@@ -145,13 +144,7 @@ export default function Component() {
 
   useEffect(() => {
     const initializeProvider = async () => {
-      const contract = new ethers.Contract(
-        CONTRACT_ADDRESS,
-        CONTRACT_ABI,
-        signer
-      );
-      setContract(contract);
-      fetchBalances(contract);
+      fetchBalances();
     };
 
     initializeProvider();
@@ -226,12 +219,18 @@ export default function Component() {
     setSelectedOutputToken(null);
     setSelectedNetwork(null);
     setTransactionStatus(null);
-    setTransactionResult(null);
     setShowSuccess(false);
+    fetchBalances();
   };
 
-  const fetchBalances = async (contractInstance) => {
+  const fetchBalances = async () => {
     try {
+      const contractInstance = new ethers.Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        signer
+      );
+
       setLoading(true);
       const [addresses, names, symbols, decimals, tokenBalances] =
         await contractInstance.getBalances(signer.address);
@@ -543,7 +542,11 @@ export default function Component() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveToken(token.symbol)}
-                        disabled={loading || transactionPending}
+                        disabled={
+                          loading ||
+                          transactionPending ||
+                          transactionStatus === "destination"
+                        }
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -554,6 +557,7 @@ export default function Component() {
                       <Input
                         type="number"
                         value={token.amount}
+                        disabled={transactionStatus === "destination"}
                         onChange={(e) =>
                           handleAmountChange(token.symbol, e.target.value)
                         }
@@ -564,7 +568,11 @@ export default function Component() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleMaxAmount(token.symbol)}
-                        disabled={loading || transactionPending}
+                        disabled={
+                          loading ||
+                          transactionPending ||
+                          transactionStatus === "destination"
+                        }
                         className={cn(
                           token.isMax && "bg-primary text-primary-foreground"
                         )}
@@ -599,7 +607,11 @@ export default function Component() {
                             role="combobox"
                             aria-expanded={openToken}
                             className="w-full justify-between"
-                            disabled={loading || transactionPending}
+                            disabled={
+                              loading ||
+                              transactionPending ||
+                              transactionStatus === "destination"
+                            }
                           >
                             Select token
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -645,7 +657,11 @@ export default function Component() {
                         variant="secondary"
                         size="full"
                         onClick={autoSelectTokens}
-                        disabled={loading || transactionPending}
+                        disabled={
+                          loading ||
+                          transactionPending ||
+                          transactionStatus === "destination"
+                        }
                       >
                         Auto-select
                       </Button>
@@ -745,7 +761,11 @@ export default function Component() {
                           role="combobox"
                           aria-expanded={openNetwork}
                           className="w-full justify-between"
-                          disabled={loading || transactionPending}
+                          disabled={
+                            loading ||
+                            transactionPending ||
+                            transactionStatus === "destination"
+                          }
                         >
                           {selectedNetwork?.label || "Select Network"}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -791,7 +811,10 @@ export default function Component() {
                           aria-expanded={openNetwork}
                           className="w-full justify-between"
                           disabled={
-                            loading || transactionPending || !selectedNetwork
+                            loading ||
+                            transactionPending ||
+                            !selectedNetwork ||
+                            transactionStatus === "destination"
                           }
                         >
                           {selectedOutputToken?.name || "Select Output Token"}
