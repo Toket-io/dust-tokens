@@ -1,6 +1,4 @@
 import * as React from "react";
-
-import { cn } from "@/lib/utils";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,26 +13,12 @@ import {
   Drawer,
   DrawerContent,
   DrawerFooter,
-  DrawerHeader,
   DrawerTrigger,
-  DrawerTitle,
   DrawerClose,
 } from "@/components/ui/drawer";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  ArrowRight,
-  ArrowDown,
-  Asterisk,
-  BadgeCheck,
-  Camera,
-  Coins,
-  Pencil,
-  Trash,
-} from "lucide-react";
-import { Separator } from "@/components/ui/separator";
+import { ArrowDown, Coins } from "lucide-react";
 import { Network, SelectedToken, Token } from "./ArcherDemo";
+import { toast } from "sonner";
 
 type ProfileFormDrawerProps = {
   selectedTokens: SelectedToken[];
@@ -63,9 +47,7 @@ export function SwapPreviewDrawer({
       setOpen(false);
       onConfirm(selectedTokens);
     } catch (error) {
-      //   toast.error(m.generic_error_title(), {
-      //     description: m.profile_save_error_message(),
-      //   });
+      toast.error("Something went wrong. Please try again later.");
     } finally {
       setSaving(false);
     }
