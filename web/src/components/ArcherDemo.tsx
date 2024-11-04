@@ -21,10 +21,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
-import { BigNumber, ethers } from "ethers";
+import { ethers } from "ethers";
 import { signer } from "@/app/page";
 import ContractsConfig from "../../../ContractsConfig";
-import { SwapSuccessDrawer } from "./SwapSuccessDrawer";
 import { toast } from "sonner";
 
 const containerStyle = {
@@ -132,7 +131,6 @@ export default function Component() {
   );
   const [loading, setLoading] = useState(false);
   const [transactionPending, setTransactionPending] = useState(false);
-  const [showSuccess, setShowSuccess] = useState<boolean>(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
   const [openOutputToken, setOpenOutputToken] = useState(false);
@@ -219,7 +217,6 @@ export default function Component() {
     setSelectedOutputToken(null);
     setSelectedNetwork(null);
     setTransactionStatus(null);
-    setShowSuccess(false);
     fetchBalances();
   };
 
@@ -481,7 +478,6 @@ export default function Component() {
               duration: 8000,
             }
           );
-          setShowSuccess(true);
 
           // Remove the event listener to avoid memory leaks
           readOnlyContractInstance.off(
@@ -874,12 +870,6 @@ export default function Component() {
           />
         )}
       </div>
-
-      {/* <SwapSuccessDrawer
-        transactionResult={transactionResult!}
-        open={showSuccess && transactionResult !== null}
-        setOpen={setShowSuccess}
-      /> */}
     </div>
   );
 }
