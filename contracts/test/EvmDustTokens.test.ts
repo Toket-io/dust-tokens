@@ -446,23 +446,10 @@ describe("EvmDustTokens", function () {
 
     await dustTokens.removeToken(DAI.address);
 
-    const isDaiWhiteListedAfter = await dustTokens.isTokenWhitelisted(
-      DAI.address
-    );
-    const isLinkWhiteListedAfter = await dustTokens.isTokenWhitelisted(
-      LINK.address
-    );
-    const isUniWhiteListedAfter = await dustTokens.isTokenWhitelisted(
-      UNI.address
-    );
-    const isWbtcWhiteListedAfter = await dustTokens.isTokenWhitelisted(
-      WBTC.address
-    );
-
-    expect(isDaiWhiteListedAfter).to.be.false;
-    expect(isLinkWhiteListedAfter).to.be.true;
-    expect(isUniWhiteListedAfter).to.be.true;
-    expect(isWbtcWhiteListedAfter).to.be.true;
+    expect(await dustTokens.isTokenWhitelisted(DAI.address)).to.be.false;
+    expect(await dustTokens.isTokenWhitelisted(LINK.address)).to.be.true;
+    expect(await dustTokens.isTokenWhitelisted(UNI.address)).to.be.true;
+    expect(await dustTokens.isTokenWhitelisted(WBTC.address)).to.be.true;
 
     const balances = await dustTokens.getBalances(signer.address);
     expect(balances).to.deep.equal([
@@ -476,5 +463,12 @@ describe("EvmDustTokens", function () {
         await UNI.balanceOf(signer.address),
       ],
     ]);
+
+    await dustTokens.addToken(DAI.address);
+
+    expect(await dustTokens.isTokenWhitelisted(DAI.address)).to.be.true;
+    expect(await dustTokens.isTokenWhitelisted(LINK.address)).to.be.true;
+    expect(await dustTokens.isTokenWhitelisted(UNI.address)).to.be.true;
+    expect(await dustTokens.isTokenWhitelisted(WBTC.address)).to.be.true;
   });
 });

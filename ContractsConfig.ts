@@ -63,7 +63,7 @@ const arbitrumForkedLocalnetConfig: ZetachainContracts = {
   zeta_uniswapRouterV2: "0x62153519C210d21f1B67dE11Cf60d6F467190707",
   zeta_usdcEthToken: "0x9fd96203f7b22bCF72d9DCb40ff98302376cE09c",
   zeta_ethEthToken: "0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe",
-  zeta_universalDapp: "0x3CFDf9646dBC385E47DC07869626Ea36BE7bA3a2",
+  zeta_universalDapp: "0xD516492bb58F07bc91c972DCCB2DF654653d4D33",
 
   // EVM ERC20s
   evm_weth: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
