@@ -24,7 +24,6 @@ import { abi as gatewayAbi } from "../abi/GatewayEVM.sol/GatewayEVM.json";
 import { abi as zerc20Abi } from "../abi/ZRC20.sol/ZRC20.json";
 import { ethers } from "ethers";
 import { useEffect, useState } from "react";
-import DustTokensActions from "../components/DustTokensActions";
 import ForkCheck from "../components/ForkCheck";
 import TokenSwapSelector from "@/components/TokenSwapSelector";
 import { evmAddresses, zetaAddresses } from "@/zetachain";
@@ -472,7 +471,6 @@ const Page = () => {
           </div>
         </div>
       </div>
-      <DustTokensActions />
       <ForkCheck />
     </div>
   );
