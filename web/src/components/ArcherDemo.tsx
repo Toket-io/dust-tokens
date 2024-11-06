@@ -19,7 +19,13 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 import { ethers } from "ethers";
 import { provider, signer } from "@/app/page";
@@ -115,7 +121,7 @@ const CONTRACT_ABI = [
   "function removeToken(address token) public",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
   "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions) public",
-  "function signatureBatchTransfer(address[] tokens, uint256[] amounts, uint256 nonce, uint256 deadline, bytes signature)",
+  "function signatureBatchTransfer((address token, uint256 amount)[], uint256 nonce, uint256 deadline, bytes signature)",
   "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
   "event SwappedAndWithdrawn(address indexed receiver, address outputToken, uint256 totalTokensReceived)",
 ];
@@ -125,7 +131,6 @@ const UNIVERSAL_APP_ADDRESS = "0xD516492bb58F07bc91c972DCCB2DF654653d4D33";
 const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
 
 export default function Component() {
-  // const [provider, setProvider] = useState(null);
   const [balances, setBalances] = useState<Token[]>([]);
   const [outputBalances, setOutputBalances] = useState<Token[]>([]);
   const [selectedOutputToken, setSelectedOutputToken] = useState<Token | null>(
@@ -160,7 +165,6 @@ export default function Component() {
 
   const handleSwapConfirm = async () => {
     setTransactionPending(true);
-    await handleApproves();
     await handleSwapAndBridge();
   };
 
@@ -346,52 +350,16 @@ export default function Component() {
     return encodedParameters;
   };
 
-  const handleApproves = async () => {
-    const ercAbi = [
-      // Read-Only Functions
-      "function balanceOf(address owner) view returns (uint256)",
-      // Authenticated Functions
-      "function transfer(address to, uint amount) returns (bool)",
-      "function deposit() public payable",
-      "function approve(address spender, uint256 amount) returns (bool)",
-      "function withdraw(uint256 wad) external",
-    ];
-
-    // Loop through selected tokens and approve them
-    for (const token of selectedTokens) {
-      const tokenContract = new ethers.Contract(token.address, ercAbi, signer);
-      const amount = ethers.utils.parseUnits(token.amount, token.decimals);
-      const tx = await tokenContract.approve(CONTRACT_ADDRESS, amount);
-      await tx.wait();
-
-      console.log(
-        "Approved token:",
-        token.name,
-        amount.toString(),
-        token.amount
-      );
-    }
-  };
-
-  const signPermit2BatchApproval = async () => {
-    console.log("Signing Permit2 batch approval...", signerAddress);
-
-    // declare needed vars
+  const signPermit = async (swaps) => {
     const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
     const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
-
-    // Arrays of tokens and amounts
-    const tokens = selectedTokens.map((t) => t.address);
-    const amounts = selectedTokens.map((t) =>
-      ethers.utils.parseUnits(t.amount, t.decimals)
-    );
 
     // Create the permit object for batched transfers
     const permit = {
       deadline: deadline,
       nonce: nonce,
-      permitted: selectedTokens.map((t, i) => {
-        return { amount: amounts[i], token: t.address };
+      permitted: swaps.map((s) => {
+        return { amount: s.amount, token: s.token };
       }),
       spender: CONTRACT_ADDRESS,
     };
@@ -411,6 +379,17 @@ export default function Component() {
     );
     const signature = await signer._signTypedData(domain, types, values);
 
+    return { deadline, nonce, signature };
+  };
+
+  const signPermit2BatchApproval = async () => {
+    const tokenSwaps = selectedTokens.map(({ amount, decimals, address }) => ({
+      amount: ethers.utils.parseUnits(amount, decimals),
+      token: address,
+    }));
+
+    const permit = await signPermit(tokenSwaps);
+
     const contractInstance = new ethers.Contract(
       CONTRACT_ADDRESS,
       CONTRACT_ABI,
@@ -419,11 +398,10 @@ export default function Component() {
 
     // Call our `signatureTransfer()` function with correct data and signature
     const tx = await contractInstance.signatureBatchTransfer(
-      tokens,
-      amounts,
-      nonce,
-      deadline,
-      signature
+      tokenSwaps,
+      permit.nonce,
+      permit.deadline,
+      permit.signature
     );
 
     tx.wait();
@@ -445,6 +423,7 @@ export default function Component() {
         !ZETA_USDC_ETH_ADDRESS ||
         !signer ||
         !signer.address ||
+        !signerAddress ||
         !selectedNetwork ||
         !selectedOutputToken
       ) {
