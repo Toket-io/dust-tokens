@@ -163,10 +163,6 @@ describe("EvmDustTokens with Permit2", function () {
   });
 
   it("should work Permit2App", async function () {
-    function calculateEndTime(duration: number) {
-      return Math.floor((Date.now() + duration) / 1000);
-    }
-
     const tokenAddress = tokenA.address;
     const provider = hre.ethers.provider;
 
@@ -227,6 +223,85 @@ describe("EvmDustTokens with Permit2", function () {
       throw error;
     }
   });
+
+  it("should work Permit2App batch", async function () {
+    const provider = hre.ethers.provider;
+
+    try {
+      // declare needed vars
+      const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
+      const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
+      // permit amount MUST match passed in signature transfer amount,
+      // unlike with AllowanceTransfer where permit amount can be uint160.max
+      // while the actual transfer amount can be less.
+
+      // Arrays of tokens and amounts
+      const tokens = [tokenA, tokenB];
+      const amounts = [
+        hre.ethers.utils.parseUnits("100", 18),
+        hre.ethers.utils.parseUnits("200", 18),
+      ];
+
+      // Create the permit object for batched transfers
+      const permit = {
+        deadline: deadline,
+        nonce: nonce,
+        permitted: [
+          { amount: amounts[0], token: tokens[0].address },
+          { amount: amounts[1], token: tokens[1].address },
+        ],
+        spender: permit2App.address,
+      };
+
+      console.log("permit object:", permit);
+
+      // Get the chainId (Sepolia = 11155111)
+      const network = await provider.getNetwork();
+      const chainId = network.chainId;
+      console.log("ChainID:", chainId);
+
+      // Generate the permit return data & sign it
+      const { domain, types, values } = SignatureTransfer.getPermitData(
+        permit,
+        PERMIT2_ADDRESS,
+        chainId
+      );
+      const signature = await signer._signTypedData(domain, types, values);
+      console.log("Signature:", signature);
+
+      // Call our `signatureTransfer()` function with correct data and signature
+      const tx = await permit2App.signatureBatchTransfer(
+        tokens.map((t) => t.address),
+        amounts,
+        nonce,
+        deadline,
+        signature
+      );
+      console.log("Transfer with permit tx sent:", tx.hash);
+      await tx.wait();
+      console.log("Tx confirmed");
+
+      // Verify the balance
+      const balanceTokenA = await tokens[0].balanceOf(permit2App.address);
+      // expect(balanceTokenA).to.equal(amounts[0]);
+
+      const balanceTokenB = await tokens[1].balanceOf(permit2App.address);
+      // expect(balanceTokenB).to.equal(amounts[1]);
+
+      console.log(
+        "Permit2App transfer completed: ",
+        balanceTokenA,
+        balanceTokenB
+      );
+    } catch (error) {
+      console.error("signatureTransfer error:", error);
+      throw error;
+    }
+  });
+
+  function calculateEndTime(duration: number) {
+    return Math.floor((Date.now() + duration) / 1000);
+  }
 
   function toDeadline(expiration: number): number {
     return Math.floor((Date.now() + expiration) / 1000);

@@ -78,6 +78,57 @@ contract Permit2App {
         );
     }
 
+    // Batch SignatureTransfer
+    function signatureBatchTransfer(
+        address[] calldata tokens,
+        uint256[] calldata amounts,
+        uint256 nonce,
+        uint256 deadline,
+        bytes calldata signature
+    ) public {
+        require(tokens.length == amounts.length, "Mismatched arrays");
+
+        // Create an array of TokenPermissions
+        ISignatureTransfer.TokenPermissions[]
+            memory permitted = new ISignatureTransfer.TokenPermissions[](
+                tokens.length
+            );
+        for (uint256 i = 0; i < tokens.length; i++) {
+            permitted[i] = ISignatureTransfer.TokenPermissions({
+                token: tokens[i],
+                amount: amounts[i]
+            });
+        }
+
+        // Create the PermitBatchTransferFrom struct
+        ISignatureTransfer.PermitBatchTransferFrom
+            memory permit = ISignatureTransfer.PermitBatchTransferFrom({
+                permitted: permitted,
+                nonce: nonce,
+                deadline: deadline
+            });
+
+        // Create an array of SignatureTransferDetails
+        ISignatureTransfer.SignatureTransferDetails[]
+            memory transferDetails = new ISignatureTransfer.SignatureTransferDetails[](
+                tokens.length
+            );
+        for (uint256 i = 0; i < tokens.length; i++) {
+            transferDetails[i] = ISignatureTransfer.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: amounts[i]
+            });
+        }
+
+        // Execute the batched permit transfer
+        permit2.permitTransferFrom(
+            permit,
+            transferDetails,
+            msg.sender, // The owner of the tokens
+            signature
+        );
+    }
+
     // State needed for `signatureTransferWithWitness()`. Unconventionally placed here as to not clutter the other examples.
     struct Witness {
         address user;
