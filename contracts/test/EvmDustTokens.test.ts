@@ -1,4 +1,5 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { PERMIT2_ADDRESS, SignatureTransfer } from "@uniswap/Permit2-sdk";
 import { expect } from "chai";
 import { BigNumber, Contract } from "ethers";
 import hre from "hardhat";
@@ -165,7 +166,8 @@ describe("EvmDustTokens", function () {
       GATEWAY_ADDRESS,
       UNISWAP_ROUTER,
       WETH_ADDRESS,
-      signer.address
+      signer.address,
+      PERMIT2_ADDRESS
     );
     await dustTokens.deployed();
     console.log("DustTokens deployed to:", dustTokens.address);
@@ -200,6 +202,14 @@ describe("EvmDustTokens", function () {
       signer
     );
     ZETA_ETH = new hre.ethers.Contract(ZETA_ETH_ADDRESS, ercAbi, signer);
+
+    // Approve permit2 contract
+    await WETH.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
+    await DAI.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
+    await USDC.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
+    await LINK.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
+    await UNI.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
+    await WBTC.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
   });
 
   this.beforeEach(async function () {
