@@ -122,13 +122,13 @@ const CONTRACT_ABI = [
   "function addToken(address token) public",
   "function removeToken(address token) public",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
-  "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions) public",
+  "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions, uint256 nonce, uint256 deadline, bytes signature) public",
   "function signatureBatchTransfer((address token, uint256 amount)[], uint256 nonce, uint256 deadline, bytes signature)",
   "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
   "event SwappedAndWithdrawn(address indexed receiver, address outputToken, uint256 totalTokensReceived)",
 ];
 
-const UNIVERSAL_APP_ADDRESS = "0xD516492bb58F07bc91c972DCCB2DF654653d4D33";
+const UNIVERSAL_APP_ADDRESS = "0xce33621C656f68fC35A461B7c9B09d90B9a1d548";
 
 const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
 
@@ -425,7 +425,6 @@ export default function Component() {
         !ZETA_USDC_ETH_ADDRESS ||
         !signer ||
         !signer.address ||
-        !signerAddress ||
         !selectedNetwork ||
         !selectedOutputToken
       ) {
@@ -458,6 +457,8 @@ export default function Component() {
         })
       );
 
+      const permit = await signPermit(tokenSwaps);
+
       // Create contract instance
       const contractInstance = new ethers.Contract(
         CONTRACT_ADDRESS,
@@ -470,7 +471,10 @@ export default function Component() {
         tokenSwaps,
         UNIVERSAL_APP_ADDRESS,
         encodedParameters,
-        revertOptions
+        revertOptions,
+        permit.nonce,
+        permit.deadline,
+        permit.signature
       );
       console.log("Transaction submitted:", tx.hash);
 
