@@ -22,9 +22,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 import { ethers } from "ethers";
-import { signer } from "@/app/page";
+import { provider, signer } from "@/app/page";
 import ContractsConfig from "../../../ContractsConfig";
 import { toast } from "sonner";
+import { SignatureTransfer, PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 
 const containerStyle = {
   display: "flex",
@@ -114,6 +115,7 @@ const CONTRACT_ABI = [
   "function removeToken(address token) public",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
   "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions) public",
+  "function signatureBatchTransfer(address[] tokens, uint256[] amounts, uint256 nonce, uint256 deadline, bytes signature)",
   "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
   "event SwappedAndWithdrawn(address indexed receiver, address outputToken, uint256 totalTokensReceived)",
 ];
@@ -370,6 +372,68 @@ export default function Component() {
       );
     }
   };
+
+  const signPermit2BatchApproval = async () => {
+    console.log("Signing Permit2 batch approval...", signerAddress);
+
+    // declare needed vars
+    const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
+    const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
+
+    // Arrays of tokens and amounts
+    const tokens = selectedTokens.map((t) => t.address);
+    const amounts = selectedTokens.map((t) =>
+      ethers.utils.parseUnits(t.amount, t.decimals)
+    );
+
+    // Create the permit object for batched transfers
+    const permit = {
+      deadline: deadline,
+      nonce: nonce,
+      permitted: selectedTokens.map((t, i) => {
+        return { amount: amounts[i], token: t.address };
+      }),
+      spender: CONTRACT_ADDRESS,
+    };
+
+    console.log("permit object:", permit);
+
+    // Get the chainId (Sepolia = 11155111)
+    const network = await provider.getNetwork();
+    const chainId = network.chainId;
+    console.log("ChainID:", chainId);
+
+    // Generate the permit return data & sign it
+    const { domain, types, values } = SignatureTransfer.getPermitData(
+      permit,
+      PERMIT2_ADDRESS,
+      chainId
+    );
+    const signature = await signer._signTypedData(domain, types, values);
+
+    const contractInstance = new ethers.Contract(
+      CONTRACT_ADDRESS,
+      CONTRACT_ABI,
+      signer
+    );
+
+    // Call our `signatureTransfer()` function with correct data and signature
+    const tx = await contractInstance.signatureBatchTransfer(
+      tokens,
+      amounts,
+      nonce,
+      deadline,
+      signature
+    );
+
+    tx.wait();
+
+    console.log("Signature Transfer TX:", tx.hash);
+  };
+
+  function calculateEndTime(duration: number) {
+    return Math.floor((Date.now() + duration) / 1000);
+  }
 
   const handleSwapAndBridge = async () => {
     try {
@@ -869,6 +933,11 @@ export default function Component() {
             onConfirm={handleSwapConfirm}
           />
         )}
+      </div>
+      <div>
+        <Button onClick={signPermit2BatchApproval}>
+          Test approve with Permit2
+        </Button>
       </div>
     </div>
   );
