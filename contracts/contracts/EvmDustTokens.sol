@@ -10,6 +10,10 @@ import {RevertContext, RevertOptions} from "@zetachain/protocol-contracts/contra
 import "@zetachain/protocol-contracts/contracts/evm/interfaces/IGatewayEVM.sol";
 import {GatewayEVM} from "@zetachain/protocol-contracts/contracts/evm/GatewayEVM.sol";
 
+import {IPermit2} from "../lib/permit2/IPermit2.sol";
+import {ISignatureTransfer} from "../lib/permit2/ISignatureTransfer.sol";
+import {IAllowanceTransfer} from "../lib/permit2/IAllowanceTransfer.sol";
+
 // Interface for WETH9 to allow withdrawals
 interface IWETH is IERC20 {
     receive() external payable;
@@ -43,12 +47,13 @@ struct SwapOutput {
 }
 
 contract EvmDustTokens is Ownable {
-    GatewayEVM public gateway;
-    uint256 constant BITCOIN = 18332;
+    GatewayEVM public immutable gateway;
+    ISwapRouter public immutable swapRouter;
+    IPermit2 public immutable permit2;
+    address payable public immutable WETH9;
+
     mapping(address => bool) public whitelistedTokens;
     address[] public tokenList;
-    ISwapRouter public immutable swapRouter;
-    address payable public immutable WETH9;
     uint24 public constant feeTier = 3000;
 
     event TokenAdded(address indexed token);
@@ -68,11 +73,13 @@ contract EvmDustTokens is Ownable {
         address payable gatewayAddress,
         ISwapRouter _swapRouter,
         address payable _WETH9,
-        address initialOwner
+        address initialOwner,
+        IPermit2 _permit2
     ) Ownable(initialOwner) {
         gateway = GatewayEVM(gatewayAddress);
         swapRouter = _swapRouter;
         WETH9 = _WETH9;
+        permit2 = _permit2;
     }
 
     receive() external payable {}
@@ -272,5 +279,85 @@ contract EvmDustTokens is Ownable {
                 balances[i] = token.balanceOf(user);
             }
         }
+    }
+
+    // Permit 2 Debugging
+    // Normal SignatureTransfer
+    function signatureTransfer(
+        address token,
+        uint256 amount,
+        uint256 nonce,
+        uint256 deadline,
+        bytes calldata signature
+    ) public {
+        permit2.permitTransferFrom(
+            // The permit message. Spender is inferred as the caller (this contract)
+            ISignatureTransfer.PermitTransferFrom({
+                permitted: ISignatureTransfer.TokenPermissions({
+                    token: token,
+                    amount: amount
+                }),
+                nonce: nonce,
+                deadline: deadline
+            }),
+            // Transfer details
+            ISignatureTransfer.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: amount
+            }),
+            msg.sender, // The owner of the tokens has to be the signer
+            signature // The resulting signature from signing hash of permit data per EIP-712 standards
+        );
+    }
+
+    // Batch SignatureTransfer
+    function signatureBatchTransfer(
+        address[] calldata tokens,
+        uint256[] calldata amounts,
+        uint256 nonce,
+        uint256 deadline,
+        bytes calldata signature
+    ) public {
+        require(tokens.length == amounts.length, "Mismatched arrays");
+
+        // Create an array of TokenPermissions
+        ISignatureTransfer.TokenPermissions[]
+            memory permitted = new ISignatureTransfer.TokenPermissions[](
+                tokens.length
+            );
+        for (uint256 i = 0; i < tokens.length; i++) {
+            permitted[i] = ISignatureTransfer.TokenPermissions({
+                token: tokens[i],
+                amount: amounts[i]
+            });
+        }
+
+        // Create the PermitBatchTransferFrom struct
+        ISignatureTransfer.PermitBatchTransferFrom
+            memory permit = ISignatureTransfer.PermitBatchTransferFrom({
+                permitted: permitted,
+                nonce: nonce,
+                deadline: deadline
+            });
+
+        // Create an array of SignatureTransferDetails
+        ISignatureTransfer.SignatureTransferDetails[]
+            memory transferDetails = new ISignatureTransfer.SignatureTransferDetails[](
+                tokens.length
+            );
+        for (uint256 i = 0; i < tokens.length; i++) {
+            transferDetails[i] = ISignatureTransfer.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: amounts[i]
+            });
+        }
+
+        // Execute the batched permit transfer
+        permit2.permitTransferFrom(
+            permit,
+            transferDetails,
+            msg.sender, // The owner of the tokens
+            signature
+        );
     }
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IPermit2} from "./IPermit2.sol";
-import {ISignatureTransfer} from "./ISignatureTransfer.sol";
-import {IAllowanceTransfer} from "./IAllowanceTransfer.sol";
+import {IPermit2} from "../lib/permit2/IPermit2.sol";
+import {ISignatureTransfer} from "../lib/permit2/ISignatureTransfer.sol";
+import {IAllowanceTransfer} from "../lib/permit2/IAllowanceTransfer.sol";
 
 // NOTE: All tokens sent to this contract are permanently lost because there is no withdraw function.
 // NOTE: Educational purposes only.

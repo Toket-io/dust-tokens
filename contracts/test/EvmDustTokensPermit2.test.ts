@@ -183,7 +183,7 @@ describe("EvmDustTokens with Permit2", function () {
           amount: amount,
           token: tokenAddress,
         },
-        spender: permit2App.address,
+        spender: dustTokens.address,
       };
       console.log("permit object:", permit);
 
@@ -202,7 +202,7 @@ describe("EvmDustTokens with Permit2", function () {
       console.log("Signature:", signature);
 
       // Call our `signatureTransfer()` function with correct data and signature
-      const tx = await permit2App.signatureTransfer(
+      const tx = await dustTokens.signatureTransfer(
         tokenAddress,
         amount,
         nonce,
@@ -214,7 +214,7 @@ describe("EvmDustTokens with Permit2", function () {
       console.log("Tx confirmed");
 
       // Verify the balance
-      const balance = await tokenA.balanceOf(permit2App.address);
+      const balance = await tokenA.balanceOf(dustTokens.address);
       expect(balance).to.equal(amount);
 
       console.log("Permit2App transfer completed: ", balance);
@@ -250,7 +250,7 @@ describe("EvmDustTokens with Permit2", function () {
           { amount: amounts[0], token: tokens[0].address },
           { amount: amounts[1], token: tokens[1].address },
         ],
-        spender: permit2App.address,
+        spender: dustTokens.address,
       };
 
       console.log("permit object:", permit);
@@ -270,7 +270,7 @@ describe("EvmDustTokens with Permit2", function () {
       console.log("Signature:", signature);
 
       // Call our `signatureTransfer()` function with correct data and signature
-      const tx = await permit2App.signatureBatchTransfer(
+      const tx = await dustTokens.signatureBatchTransfer(
         tokens.map((t) => t.address),
         amounts,
         nonce,
@@ -282,10 +282,10 @@ describe("EvmDustTokens with Permit2", function () {
       console.log("Tx confirmed");
 
       // Verify the balance
-      const balanceTokenA = await tokens[0].balanceOf(permit2App.address);
+      const balanceTokenA = await tokens[0].balanceOf(dustTokens.address);
       // expect(balanceTokenA).to.equal(amounts[0]);
 
-      const balanceTokenB = await tokens[1].balanceOf(permit2App.address);
+      const balanceTokenB = await tokens[1].balanceOf(dustTokens.address);
       // expect(balanceTokenB).to.equal(amounts[1]);
 
       console.log(
