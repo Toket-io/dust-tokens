@@ -5,13 +5,19 @@ import {
   PERMIT2_ADDRESS,
   PermitBatch,
   PermitDetails,
+  SignatureTransfer,
 } from "@uniswap/Permit2-sdk";
 import { expect } from "chai";
 import { BigNumber, Contract } from "ethers";
 import hre from "hardhat";
 
 import ContractsConfig from "../../ContractsConfig";
-import { EvmDustTokens, SimpleSwap, Swap } from "../typechain-types";
+import {
+  EvmDustTokens,
+  Permit2App,
+  SimpleSwap,
+  Swap,
+} from "../typechain-types";
 
 const DAI_DECIMALS = 18;
 const USDC_DECIMALS = 6;
@@ -34,8 +40,6 @@ const WBTC_ADDRESS: string = process.env.WBTC_ADDRESS ?? "";
 
 const UNISWAP_ROUTER: string = ContractsConfig.evm_uniswapRouterV3;
 
-const permit2Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-
 const ercAbi = [
   // Read-Only Functions
   "function symbol() view returns (string)",
@@ -57,6 +61,7 @@ type TokenSwap = {
 describe("EvmDustTokens with Permit2", function () {
   let signer: SignerWithAddress;
   let dustTokens: EvmDustTokens;
+  let permit2App: Permit2App;
   let tokenA: Contract;
   let tokenB: Contract;
 
@@ -72,7 +77,7 @@ describe("EvmDustTokens with Permit2", function () {
       UNISWAP_ROUTER,
       WETH_ADDRESS,
       signer.address,
-      permit2Address
+      PERMIT2_ADDRESS
     );
 
     // Deploy EvmDustTokens contract with PERMIT2 address
@@ -84,11 +89,18 @@ describe("EvmDustTokens with Permit2", function () {
       UNISWAP_ROUTER,
       WETH_ADDRESS,
       signer.address,
-      permit2Address
+      PERMIT2_ADDRESS
     );
     await dustTokens.deployed();
 
     console.log("DustTokens deployed to:", dustTokens.address);
+
+    const Permit2AppFactory = await hre.ethers.getContractFactory("Permit2App");
+    permit2App = await Permit2AppFactory.deploy(PERMIT2_ADDRESS);
+
+    await permit2App.deployed();
+
+    console.log("Permit2App deployed to:", permit2App.address);
 
     // Deploy two new ERC20 tokens
     const ERC20Factory = await hre.ethers.getContractFactory("ERC20Mock");
@@ -103,8 +115,8 @@ describe("EvmDustTokens with Permit2", function () {
     await tokenB.mint(signer.address, hre.ethers.utils.parseEther("1000"));
 
     // Approve token for Permit2
-    await tokenA.approve(permit2Address, hre.ethers.constants.MaxUint256);
-    await tokenB.approve(permit2Address, hre.ethers.constants.MaxUint256);
+    await tokenA.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
+    await tokenB.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
 
     // Add tokens to whitelist
     await dustTokens.addToken(tokenA.address);
@@ -150,6 +162,72 @@ describe("EvmDustTokens with Permit2", function () {
     expect(balanceB).to.equal(amountB);
   });
 
+  it("should work Permit2App", async function () {
+    function calculateEndTime(duration: number) {
+      return Math.floor((Date.now() + duration) / 1000);
+    }
+
+    const tokenAddress = tokenA.address;
+    const provider = hre.ethers.provider;
+
+    try {
+      // declare needed vars
+      const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
+      const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
+      // permit amount MUST match passed in signature transfer amount,
+      // unlike with AllowanceTransfer where permit amount can be uint160.max
+      // while the actual transfer amount can be less.
+      const amount = hre.ethers.utils.parseUnits("123", 18);
+
+      // create permit object
+      const permit = {
+        deadline: deadline,
+        nonce: nonce,
+        permitted: {
+          amount: amount,
+          token: tokenAddress,
+        },
+        spender: permit2App.address,
+      };
+      console.log("permit object:", permit);
+
+      // Get the chainId (Sepolia = 11155111)
+      const network = await provider.getNetwork();
+      const chainId = network.chainId;
+      console.log("ChainID:", chainId);
+
+      // Generate the permit return data & sign it
+      const { domain, types, values } = SignatureTransfer.getPermitData(
+        permit,
+        PERMIT2_ADDRESS,
+        chainId
+      );
+      const signature = await signer._signTypedData(domain, types, values);
+      console.log("Signature:", signature);
+
+      // Call our `signatureTransfer()` function with correct data and signature
+      const tx = await permit2App.signatureTransfer(
+        tokenAddress,
+        amount,
+        nonce,
+        deadline,
+        signature
+      );
+      console.log("Transfer with permit tx sent:", tx.hash);
+      await tx.wait();
+      console.log("Tx confirmed");
+
+      // Verify the balance
+      const balance = await tokenA.balanceOf(permit2App.address);
+      expect(balance).to.equal(amount);
+
+      console.log("Permit2App transfer completed: ", balance);
+    } catch (error) {
+      console.error("signatureTransfer error:", error);
+      throw error;
+    }
+  });
+
   function toDeadline(expiration: number): number {
     return Math.floor((Date.now() + expiration) / 1000);
   }
@@ -177,6 +255,13 @@ describe("EvmDustTokens with Permit2", function () {
       );
 
       // Return the PermitDetails object
+      const details: PermitDetails = {
+        amount: hre.ethers.utils.parseUnits("1", 18),
+        expiration: deadline,
+        nonce,
+        token: token.address,
+      };
+
       return {
         amount: hre.ethers.utils.parseUnits("1", 18),
         expiration: deadline,
@@ -244,7 +329,7 @@ describe("EvmDustTokens with Permit2", function () {
   //   const domain = {
   //     chainId: hre.network.config.chainId,
   //     name: "Permit2",
-  //     verifyingContract: permit2Address,
+  //     verifyingContract: PERMIT2_ADDRESS,
   //     version: "1",
   //   };
 
