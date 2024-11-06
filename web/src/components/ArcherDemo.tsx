@@ -68,6 +68,7 @@ export interface Token {
 export type SelectedToken = Token & {
   amount: string;
   isMax: boolean;
+  hasPermit2Allowance: boolean;
 };
 
 export type Network = {
@@ -119,6 +120,7 @@ const networks: Network[] = [
 
 const CONTRACT_ABI = [
   "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
+  "function hasPermit2Allowance(address user, address token, uint256 requiredAmount) view returns (bool)",
   "function addToken(address token) public",
   "function removeToken(address token) public",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
@@ -177,7 +179,7 @@ export default function Component() {
     ) {
       setSelectedTokens([
         ...selectedTokens,
-        { ...token, amount: "", isMax: false },
+        { ...token, amount: "", isMax: false, hasPermit2Allowance: false },
       ]);
     } else {
       setSelectedTokens(
@@ -201,11 +203,54 @@ export default function Component() {
     setOpenNetwork(false);
   };
 
-  const handleAmountChange = (tokenValue: string, amount: string) => {
+  const handleApprovePermit2 = async (token: Token) => {
+    const ercAbi = [
+      "function approve(address spender, uint256 amount) returns (bool)",
+    ];
+
+    const tokenContract = new ethers.Contract(token.address, ercAbi, signer);
+    const tx = await tokenContract.approve(
+      PERMIT2_ADDRESS,
+      ethers.constants.MaxUint256
+    );
+    await tx.wait();
+
+    console.log("Approved token");
+  };
+
+  const handleAmountChange = async (tokenValue: string, amount: string) => {
     // TODO: Check that amount is a valid number and within the token's balance
+
+    const contractInstance = new ethers.Contract(
+      CONTRACT_ADDRESS,
+      CONTRACT_ABI,
+      signer
+    );
+
+    const selectedToken = selectedTokens.find(
+      (token) => token.symbol === tokenValue
+    );
+
+    let hasPermit2Allowance = true;
+    if (selectedToken && amount !== "") {
+      console.log("CHECKING PERMIT2 ALLOWANCE: ", selectedToken);
+      hasPermit2Allowance = await contractInstance.hasPermit2Allowance(
+        signer.address,
+        selectedToken.address,
+        ethers.utils.parseUnits(amount, selectedToken.decimals)
+      );
+    }
+
     setSelectedTokens(
       selectedTokens.map((token) =>
-        token.symbol === tokenValue ? { ...token, amount, isMax: false } : token
+        token.symbol === tokenValue
+          ? {
+              ...token,
+              amount,
+              isMax: false,
+              hasPermit2Allowance,
+            }
+          : token
       )
     );
   };
@@ -626,6 +671,30 @@ export default function Component() {
                       </Button>
                     </div>
                   </CardContent>
+                  <CardFooter>
+                    <div className="flex justify-between items-center w-full">
+                      <span className="text-xs">
+                        Balance: {token.balance.toFixed(2)}
+                      </span>
+                      <span className="text-xs text-red-500">
+                        {token.hasPermit2Allowance ? "" : "Missing Permit2"}
+                        {!token.hasPermit2Allowance && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleApprovePermit2(token)}
+                            disabled={
+                              loading ||
+                              transactionPending ||
+                              transactionStatus === "destination"
+                            }
+                          >
+                            Approve
+                          </Button>
+                        )}
+                      </span>
+                    </div>
+                  </CardFooter>
                 </Card>
               </ArcherElement>
             ))}

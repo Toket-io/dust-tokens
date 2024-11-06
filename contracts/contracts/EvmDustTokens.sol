@@ -237,6 +237,19 @@ contract EvmDustTokens is Ownable {
         return whitelistedTokens[token];
     }
 
+    // Function to check standard ERC20 allowance
+    function hasPermit2Allowance(
+        address user,
+        address token,
+        uint256 requiredAmount
+    ) external view returns (bool) {
+        uint256 allowanceAmount = IERC20(token).allowance(
+            user,
+            address(permit2)
+        );
+        return allowanceAmount >= requiredAmount;
+    }
+
     function getBalances(
         address user
     )
