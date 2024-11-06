@@ -172,28 +172,30 @@ describe("EvmDustTokens with Permit2", function () {
     const provider = hre.ethers.provider;
 
     try {
-      // declare needed vars
       const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
       const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
-      // permit amount MUST match passed in signature transfer amount,
-      // unlike with AllowanceTransfer where permit amount can be uint160.max
-      // while the actual transfer amount can be less.
 
       // Arrays of tokens and amounts
       const tokens = [tokenA, tokenB];
-      const amounts = [
-        hre.ethers.utils.parseUnits("100", 18),
-        hre.ethers.utils.parseUnits("200", 18),
+
+      const swaps: TokenSwap[] = [
+        {
+          amount: hre.ethers.utils.parseUnits("100", 18),
+          token: tokenA.address,
+        },
+        {
+          amount: hre.ethers.utils.parseUnits("200", 18),
+          token: tokenB.address,
+        },
       ];
 
       // Create the permit object for batched transfers
       const permit = {
         deadline: deadline,
         nonce: nonce,
-        permitted: [
-          { amount: amounts[0], token: tokens[0].address },
-          { amount: amounts[1], token: tokens[1].address },
-        ],
+        permitted: swaps.map((s) => {
+          return { amount: s.amount, token: s.token };
+        }),
         spender: dustTokens.address,
       };
 
@@ -215,8 +217,7 @@ describe("EvmDustTokens with Permit2", function () {
 
       // Call our `signatureTransfer()` function with correct data and signature
       const tx = await dustTokens.signatureBatchTransfer(
-        tokens.map((t) => t.address),
-        amounts,
+        swaps,
         nonce,
         deadline,
         signature

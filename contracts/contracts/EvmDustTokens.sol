@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 
 import {RevertContext, RevertOptions} from "@zetachain/protocol-contracts/contracts/Revert.sol";
@@ -85,15 +86,21 @@ contract EvmDustTokens is Ownable {
     receive() external payable {}
 
     function SwapAndBridgeTokens(
-        SwapInput[] memory swaps,
+        SwapInput[] calldata swaps,
         address universalApp,
         bytes calldata payload,
-        RevertOptions calldata revertOptions
+        RevertOptions calldata revertOptions,
+        uint256 nonce,
+        uint256 deadline,
+        bytes calldata signature
     ) external {
         uint256 totalTokensReceived = 0;
         address outputToken = WETH9;
 
         require(swaps.length > 0, "No swaps provided");
+
+        // Batch transfer all input tokens using Permit2
+        signatureBatchTransfer(swaps, nonce, deadline, signature);
 
         // Array to store performed swaps
         SwapOutput[] memory performedSwaps = new SwapOutput[](swaps.length);
@@ -105,24 +112,6 @@ contract EvmDustTokens is Ownable {
             uint256 amount = swap.amount;
 
             require(whitelistedTokens[token], "Swap token not whitelisted");
-
-            // Check allowance and balance
-            uint256 allowance = IERC20(token).allowance(
-                msg.sender,
-                address(this)
-            );
-            require(allowance >= amount, "Insufficient allowance for token");
-
-            uint256 balance = IERC20(token).balanceOf(msg.sender);
-            require(balance >= amount, "Insufficient token balance");
-
-            // Transfer token from user to this contract
-            TransferHelper.safeTransferFrom(
-                token,
-                msg.sender,
-                address(this),
-                amount
-            );
 
             // Approve the swap router to spend the token
             TransferHelper.safeApprove(token, address(swapRouter), amount);
@@ -312,23 +301,46 @@ contract EvmDustTokens is Ownable {
 
     // Batch SignatureTransfer
     function signatureBatchTransfer(
-        address[] calldata tokens,
-        uint256[] calldata amounts,
+        SwapInput[] calldata swaps,
         uint256 nonce,
         uint256 deadline,
         bytes calldata signature
     ) public {
-        require(tokens.length == amounts.length, "Mismatched arrays");
+        uint256 length = swaps.length;
 
-        // Create an array of TokenPermissions
+        // Create arrays for TokenPermissions and SignatureTransferDetails
         ISignatureTransfer.TokenPermissions[]
             memory permitted = new ISignatureTransfer.TokenPermissions[](
-                tokens.length
+                length
             );
-        for (uint256 i = 0; i < tokens.length; i++) {
+        ISignatureTransfer.SignatureTransferDetails[]
+            memory transferDetails = new ISignatureTransfer.SignatureTransferDetails[](
+                length
+            );
+
+        for (uint256 i = 0; i < length; i++) {
+            SwapInput calldata swap = swaps[i];
+            address token = swap.token;
+            uint256 amount = swap.amount;
+
+            // Check allowance and balance
+            uint256 allowance = IERC20(token).allowance(
+                msg.sender,
+                address(permit2)
+            );
+            require(allowance >= amount, "Insufficient allowance for token");
+
+            uint256 balance = IERC20(token).balanceOf(msg.sender);
+            require(balance >= amount, "Insufficient token balance");
+
             permitted[i] = ISignatureTransfer.TokenPermissions({
-                token: tokens[i],
-                amount: amounts[i]
+                token: token,
+                amount: amount
+            });
+
+            transferDetails[i] = ISignatureTransfer.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: amount
             });
         }
 
@@ -339,18 +351,6 @@ contract EvmDustTokens is Ownable {
                 nonce: nonce,
                 deadline: deadline
             });
-
-        // Create an array of SignatureTransferDetails
-        ISignatureTransfer.SignatureTransferDetails[]
-            memory transferDetails = new ISignatureTransfer.SignatureTransferDetails[](
-                tokens.length
-            );
-        for (uint256 i = 0; i < tokens.length; i++) {
-            transferDetails[i] = ISignatureTransfer.SignatureTransferDetails({
-                to: address(this),
-                requestedAmount: amounts[i]
-            });
-        }
 
         // Execute the batched permit transfer
         permit2.permitTransferFrom(

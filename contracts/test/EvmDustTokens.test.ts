@@ -138,6 +138,42 @@ describe("EvmDustTokens", function () {
     }
   };
 
+  function calculateEndTime(duration: number) {
+    return Math.floor((Date.now() + duration) / 1000);
+  }
+
+  const signPermit = async (swaps: TokenSwap[]) => {
+    const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
+    const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
+
+    // Create the permit object for batched transfers
+    const permit = {
+      deadline: deadline,
+      nonce: nonce,
+      permitted: swaps.map((s) => {
+        return { amount: s.amount, token: s.token };
+      }),
+      spender: dustTokens.address,
+    };
+
+    console.log("permit object:", permit);
+
+    // Get the chainId (Sepolia = 11155111)
+    const network = await hre.ethers.provider.getNetwork();
+    const chainId = network.chainId;
+    console.log("ChainID:", chainId);
+
+    // Generate the permit return data & sign it
+    const { domain, types, values } = SignatureTransfer.getPermitData(
+      permit,
+      PERMIT2_ADDRESS,
+      chainId
+    );
+    const signature = await signer._signTypedData(domain, types, values);
+
+    return { deadline, nonce, signature };
+  };
+
   // MARK: Setup
   this.beforeAll(async function () {
     // Save Signer
@@ -313,8 +349,8 @@ describe("EvmDustTokens", function () {
       },
     ];
 
-    // Step 4: Approve tokens
-    await approveTokens(swaps);
+    // Step 4: Sign permit
+    const permit = await signPermit(swaps);
 
     // Step 5: Save the start balance of the receiver
     const receiverStartBalance = await outputTokenContract.balanceOf(
@@ -336,7 +372,10 @@ describe("EvmDustTokens", function () {
       swaps,
       universalApp.address,
       encodedParameters,
-      revertOptions
+      revertOptions,
+      permit.nonce,
+      permit.deadline,
+      permit.signature
     );
     const receipt = await tx.wait();
 
@@ -393,8 +432,8 @@ describe("EvmDustTokens", function () {
       },
     ];
 
-    // Step 4: Approve tokens
-    await approveTokens(swaps);
+    // Step 4: Sign permit
+    const permit = await signPermit(swaps);
 
     // Step 5: Save the start balance of the receiver
     const receiverStartBalance = await receiver.getBalance();
@@ -414,7 +453,10 @@ describe("EvmDustTokens", function () {
       swaps,
       universalApp.address,
       encodedParameters,
-      revertOptions
+      revertOptions,
+      permit.nonce,
+      permit.deadline,
+      permit.signature
     );
     const receipt = await tx.wait();
 
