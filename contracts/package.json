@@ -11,7 +11,7 @@
     "swap": "npx hardhat swap --network localhost",
     "balance": "npx hardhat balance --network localhost",
     "localnet": "npx hardhat localnet --network localhost",
-    "localnet:arbitrum": "npx hardhat localnet --anvil --fork-url=https://arb1.arbitrum.io/rpc --network localhost",
+    "localnet:arbitrum": "npx hardhat localnet --anvil '--fork-url=https://arb1.arbitrum.io/rpc --chain-id=31337' --network localhost",
     "test": "npx hardhat test --network localhost",
     "test:permit2": "npx hardhat test --grep 'should transfer tokens using Permit2 batched transfer'  --network localhost",
     "test:permit2App": "npx hardhat test --grep 'should work Permit2App'  --network localhost",

@@ -80,13 +80,15 @@ export type Network = {
   nativeToken: Token;
 };
 
+const CONTRACT_ADDRESS = "0x12604a5B388a1E1834693bfe94dDdF81A60B56A2";
+
 const networks: Network[] = [
   {
     value: "ethereum",
     label: "Ethereum",
     enabled: true,
     rpc: "http://localhost:8545",
-    contractAddress: "0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF",
+    contractAddress: CONTRACT_ADDRESS,
     zrc20Address: ContractsConfig.zeta_ethEthToken,
     nativeToken: {
       name: "Ether (Native)",
@@ -101,7 +103,7 @@ const networks: Network[] = [
     label: "Binance Smart Chain",
     enabled: false,
     rpc: "",
-    contractAddress: "0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF",
+    contractAddress: CONTRACT_ADDRESS,
     zrc20Address: ContractsConfig.zeta_ethEthToken,
     nativeToken: {
       name: "Ether (Native)",
@@ -114,7 +116,7 @@ const networks: Network[] = [
 ];
 
 // Replace with your deployed contract's address and ABI
-const CONTRACT_ADDRESS = "0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF";
+
 const CONTRACT_ABI = [
   "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
   "function addToken(address token) public",
