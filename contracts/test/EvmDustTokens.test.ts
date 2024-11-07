@@ -475,6 +475,67 @@ describe("EvmDustTokens", function () {
     expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
   });
 
+  it("Should receive tokens and send native gas ", async function () {
+    // Step 0: Output token
+    const outputTokenContractAddress =
+      "0x0000000000000000000000000000000000000000";
+
+    // Step 5: Save the start balance of the receiver
+    const receiverStartBalance = await receiver.getBalance();
+
+    const tx = await dustTokens.ReceiveTokens(
+      outputTokenContractAddress,
+      receiver.address,
+      {
+        value: hre.ethers.utils.parseEther("1"),
+      }
+    );
+    const receipt = await tx.wait();
+
+    // Step 7: Check that the receipt includes the event SwappedAndDeposited
+    const depositEvent = receipt.events?.find(
+      (e) => e.event === "SwappedAndWithdrawn"
+    );
+
+    expect(tx).not.reverted;
+    expect(depositEvent).exist;
+
+    // Step 8: Check the receiver's balance for the output token
+    const receiverBalance = await receiver.getBalance();
+
+    expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
+  });
+
+  it("Should receive tokens and send output token ", async function () {
+    // Step 0: Output token
+    const outputToken = LINK;
+
+    // Step 5: Save the start balance of the receiver
+    const receiverStartBalance = await outputToken.balanceOf(receiver.address);
+
+    const tx = await dustTokens.ReceiveTokens(
+      outputToken.address,
+      receiver.address,
+      {
+        value: hre.ethers.utils.parseEther("1"),
+      }
+    );
+    const receipt = await tx.wait();
+
+    // Step 7: Check that the receipt includes the event SwappedAndDeposited
+    const depositEvent = receipt.events?.find(
+      (e) => e.event === "SwappedAndWithdrawn"
+    );
+
+    expect(tx).not.reverted;
+    expect(depositEvent).exist;
+
+    // Step 8: Check the receiver's balance for the output token
+    const receiverBalance = await outputToken.balanceOf(receiver.address);
+
+    expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
+  });
+
   it("Should handle multiple tokens and balances", async function () {
     const isDaiWhiteListed = await dustTokens.isTokenWhitelisted(DAI.address);
     const isLinkWhiteListed = await dustTokens.isTokenWhitelisted(LINK.address);
