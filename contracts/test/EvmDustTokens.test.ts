@@ -156,8 +156,6 @@ describe("EvmDustTokens", function () {
       spender: dustTokens.address,
     };
 
-    console.log("permit object:", permit);
-
     // Get the chainId (Sepolia = 11155111)
     const network = await hre.ethers.provider.getNetwork();
     const chainId = network.chainId;
@@ -587,12 +585,7 @@ describe("EvmDustTokens", function () {
 
   it("Should deposit multiple tokens with Permit2 batch signature transfer", async function () {
     try {
-      const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
-      const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
-
-      // Arrays of tokens and amounts
       const tokens = [DAI, UNI];
-
       const swaps: TokenSwap[] = [
         {
           amount: hre.ethers.utils.parseUnits("100", 18),
@@ -604,38 +597,14 @@ describe("EvmDustTokens", function () {
         },
       ];
 
-      // Create the permit object for batched transfers
-      const permit = {
-        deadline: deadline,
-        nonce: nonce,
-        permitted: swaps.map((s) => {
-          return { amount: s.amount, token: s.token };
-        }),
-        spender: dustTokens.address,
-      };
-
-      console.log("permit object:", permit);
-
-      // Get the chainId (Sepolia = 11155111)
-      const network = await hre.ethers.provider.getNetwork();
-      const chainId = network.chainId;
-      console.log("ChainID:", chainId);
-
-      // Generate the permit return data & sign it
-      const { domain, types, values } = SignatureTransfer.getPermitData(
-        permit,
-        PERMIT2_ADDRESS,
-        chainId
-      );
-      const signature = await signer._signTypedData(domain, types, values);
-      console.log("Signature:", signature);
+      const permit = await signPermit(swaps);
 
       // Call our `signatureTransfer()` function with correct data and signature
       const tx = await dustTokens.signatureBatchTransfer(
         swaps,
-        nonce,
-        deadline,
-        signature
+        permit.nonce,
+        permit.deadline,
+        permit.signature
       );
       console.log("Transfer with permit tx sent:", tx.hash);
       await tx.wait();
