@@ -3,7 +3,7 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 
 const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
   const network = hre.network.name;
-  const { tx } = args;
+  const { tx, eventname } = args;
 
   try {
     // Get the transaction receipt
@@ -21,7 +21,7 @@ const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
       contractArtifact.abi
     );
 
-    const event = contractInterface.getEvent("Debug");
+    const event = contractInterface.getEvent(eventname);
     const eventSignature = contractInterface.getEventTopic(event);
 
     // Filter logs for the given event
@@ -54,7 +54,7 @@ const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
 
 const mainEvm = async (args: any, hre: HardhatRuntimeEnvironment) => {
   const network = hre.network.name;
-  const { tx, event } = args;
+  const { tx, eventname } = args;
 
   try {
     // Get the transaction receipt
@@ -64,7 +64,17 @@ const mainEvm = async (args: any, hre: HardhatRuntimeEnvironment) => {
       throw new Error(`Transaction ${tx} not found.`);
     }
 
-    console.log(`Transaction ${tx} mined in block ${receipt.blockNumber}`);
+    console.log(
+      `\n\n------ Transaction ${tx} mined in block ${receipt.blockNumber}`
+    );
+
+    // Get the transaction object
+    const transaction = await hre.ethers.provider.getTransaction(tx);
+    console.log(
+      `VALUE: (msg.value): ${hre.ethers.utils.formatEther(
+        transaction.value
+      )} ETH`
+    );
 
     // Load the contract artifact and create an interface
     const contractArtifact = await hre.artifacts.readArtifact("EvmDustTokens");
@@ -73,7 +83,7 @@ const mainEvm = async (args: any, hre: HardhatRuntimeEnvironment) => {
     );
 
     // Get the event signature
-    const event = contractInterface.getEvent("DebugReceiveTokens");
+    const event = contractInterface.getEvent(eventname);
     const eventSignature = contractInterface.getEventTopic(event);
 
     // Filter logs for the given event
@@ -82,28 +92,27 @@ const mainEvm = async (args: any, hre: HardhatRuntimeEnvironment) => {
     );
 
     if (eventLogs.length === 0) {
-      console.log(`No events named "${event}" found in transaction ${tx}.`);
+      console.log(
+        `\nEVENT: No events named "${eventname}" found in transaction.\n------`
+      );
       return;
     }
 
     // Decode and log the event details
     eventLogs.forEach((log, index) => {
       const decodedEvent = contractInterface.parseLog(log);
-      console.log(`Event ${event} [${index}]:`, decodedEvent.args);
+      console.log(`\nEVENT: ${event} [${index}]:`, decodedEvent.args);
+      console.log("------");
     });
   } catch (error) {
     console.error(`Error fetching event: ${error.message}`);
   }
 };
 
-task(
-  "debug-event",
-  "Fetches a specific event from a transaction",
-  main
-).addParam("tx", "The transaction ID to analyze");
+task("debug-event", "Fetches a specific event from a transaction", main)
+  .addParam("eventname", "The event name to analyze")
+  .addParam("tx", "The transaction ID to analyze");
 
-task(
-  "debug-event-evm",
-  "Fetches a specific event from a transaction",
-  mainEvm
-).addParam("tx", "The transaction ID to analyze");
+task("debug-event-evm", "Fetches a specific event from a transaction", mainEvm)
+  .addParam("eventname", "The event name to analyze")
+  .addParam("tx", "The transaction ID to analyze");
