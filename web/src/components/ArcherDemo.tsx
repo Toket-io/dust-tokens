@@ -863,7 +863,26 @@ export default function Component() {
                 </span>
               </div>
             </ArcherElement>
-            <TransactionStatus steps={steps} currentStep={currentStep} />
+            {currentStep ? (
+              <TransactionStatus steps={steps} currentStep={currentStep} />
+            ) : (
+              <div className="flex items-center justify-center mt-4">
+                {transactionStatus === "destination" ? (
+                  <Button size="lg" onClick={handleReset}>
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Reset
+                  </Button>
+                ) : (
+                  <SwapPreviewDrawer
+                    selectedTokens={selectedTokens}
+                    selectedNetwork={selectedNetwork}
+                    selectedOutputToken={selectedOutputToken}
+                    disabled={loading || transactionPending}
+                    onConfirm={handleSwapConfirm}
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           {/* Additional element to the right of the root */}
@@ -988,22 +1007,6 @@ export default function Component() {
           </div>
         </div>
       </ArcherContainer>
-      <div className="flex items-center justify-center mt-4">
-        {transactionStatus === "destination" ? (
-          <Button size="lg" onClick={handleReset}>
-            <RotateCcw className="w-4 h-4 mr-2" />
-            Reset
-          </Button>
-        ) : (
-          <SwapPreviewDrawer
-            selectedTokens={selectedTokens}
-            selectedNetwork={selectedNetwork}
-            selectedOutputToken={selectedOutputToken}
-            disabled={loading || transactionPending}
-            onConfirm={handleSwapConfirm}
-          />
-        )}
-      </div>
     </div>
   );
 }
