@@ -82,14 +82,12 @@ export type Network = {
   nativeToken: Token;
 };
 
-export type Step = "source" | "zeta" | "destination";
-export type Status = "idle" | "pending" | "success" | "error";
-
-export interface StepStatus {
-  status: Status;
-}
-
-const CONTRACT_ADDRESS = "0x12604a5B388a1E1834693bfe94dDdF81A60B56A2";
+export type TransactionState =
+  | "notStarted"
+  | "sourcePending"
+  | "zetaPending"
+  | "destinationPending"
+  | "completed";
 
 const networks: Network[] = [
   {
@@ -97,7 +95,7 @@ const networks: Network[] = [
     label: "Ethereum",
     enabled: true,
     rpc: "http://localhost:8545",
-    contractAddress: CONTRACT_ADDRESS,
+    contractAddress: ContractsConfig.evmDapp,
     zrc20Address: ContractsConfig.zeta_ethEthToken,
     nativeToken: {
       name: "Ether (Native)",
@@ -112,7 +110,7 @@ const networks: Network[] = [
     label: "Binance Smart Chain",
     enabled: false,
     rpc: "",
-    contractAddress: CONTRACT_ADDRESS,
+    contractAddress: ContractsConfig.evmDapp,
     zrc20Address: ContractsConfig.zeta_ethEthToken,
     nativeToken: {
       name: "Ether (Native)",
@@ -143,61 +141,13 @@ export default function Component() {
     null
   );
   const [loading, setLoading] = useState(false);
-  const [transactionPending, setTransactionPending] = useState(false);
   const [openToken, setOpenToken] = useState(false);
   const [openNetwork, setOpenNetwork] = useState(false);
   const [openOutputToken, setOpenOutputToken] = useState(false);
   const [selectedTokens, setSelectedTokens] = useState<SelectedToken[]>([]);
   const [selectedNetwork, setSelectedNetwork] = useState<Network | null>(null);
-  const [transactionStatus, setTransactionStatus] = useState<
-    "source" | "zeta" | "destination" | null
-  >(null);
-
-  const [steps, setSteps] = useState<Record<Step, StepStatus>>({
-    source: { status: "idle" },
-    zeta: { status: "idle" },
-    destination: { status: "idle" },
-  });
-  const [currentStep, setCurrentStep] = useState<Step | null>(null);
-  const updateStep = useCallback((step: Step, status: Status) => {
-    setSteps((prevSteps) => ({
-      ...prevSteps,
-      [step]: { status },
-    }));
-  }, []);
-
-  const resetTransaction = useCallback(() => {
-    setSteps({
-      source: { status: "idle" },
-      zeta: { status: "idle" },
-      destination: { status: "idle" },
-    });
-    setCurrentStep(null);
-  }, []);
-
-  const simulateStepProcess = useCallback(
-    async (step: Step) => {
-      updateStep(step, "pending");
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulating API call
-      const success = Math.random() > 0.2; // 80% success rate
-      updateStep(step, success ? "success" : "error");
-      return success;
-    },
-    [updateStep]
-  );
-
-  const startTransaction = useCallback(async () => {
-    resetTransaction();
-    const steps: Step[] = ["source", "zeta", "destination"];
-
-    for (const step of steps) {
-      setCurrentStep(step);
-      const success = await simulateStepProcess(step);
-      if (!success) break;
-    }
-
-    setCurrentStep(null);
-  }, [resetTransaction, simulateStepProcess]);
+  const [transactionStatus, setTransactionStatus] =
+    useState<TransactionState>("notStarted");
 
   useEffect(() => {
     const initializeProvider = async () => {
@@ -216,9 +166,7 @@ export default function Component() {
   }, [selectedNetwork]);
 
   const handleSwapConfirm = async () => {
-    setTransactionPending(true);
     await handleSwapAndBridge();
-    startTransaction();
   };
 
   const handleSelectToken = (token: Token) => {
@@ -271,7 +219,7 @@ export default function Component() {
     // TODO: Check that amount is a valid number and within the token's balance
 
     const contractInstance = new ethers.Contract(
-      CONTRACT_ADDRESS,
+      ContractsConfig.evmDapp,
       CONTRACT_ABI,
       signer
     );
@@ -318,14 +266,14 @@ export default function Component() {
     setSelectedTokens([]);
     setSelectedOutputToken(null);
     setSelectedNetwork(null);
-    setTransactionStatus(null);
+    setTransactionStatus("notStarted");
     fetchBalances();
   };
 
   const fetchBalances = async () => {
     try {
       const contractInstance = new ethers.Contract(
-        CONTRACT_ADDRESS,
+        ContractsConfig.evmDapp,
         CONTRACT_ABI,
         signer
       );
@@ -362,7 +310,7 @@ export default function Component() {
 
       // Create a read-only contract instance by passing only the provider
       const contractInstance = new ethers.Contract(
-        CONTRACT_ADDRESS,
+        ContractsConfig.evmDapp,
         CONTRACT_ABI,
         localhostProvider
       );
@@ -413,13 +361,21 @@ export default function Component() {
   };
 
   const encodeZetachainPayload = (
-    outputChainToken: string,
-    destinationContract: string,
+    targetChainToken: string,
+    targetChainCounterparty: string,
+    recipient: string,
+    outputToken: string,
     destinationPayload: string
   ) => {
     const args = {
-      types: ["address", "bytes", "bytes"],
-      values: [outputChainToken, destinationContract, destinationPayload],
+      types: ["address", "bytes", "address", "address", "bytes"],
+      values: [
+        targetChainToken,
+        targetChainCounterparty,
+        recipient,
+        outputToken,
+        destinationPayload,
+      ],
     };
 
     // Prepare encoded parameters for the call
@@ -457,7 +413,7 @@ export default function Component() {
       permitted: swaps.map((s) => {
         return { amount: s.amount, token: s.token };
       }),
-      spender: CONTRACT_ADDRESS,
+      spender: ContractsConfig.evmDapp,
     };
 
     console.log("permit object:", permit);
@@ -487,7 +443,7 @@ export default function Component() {
     const permit = await signPermit(tokenSwaps);
 
     const contractInstance = new ethers.Contract(
-      CONTRACT_ADDRESS,
+      ContractsConfig.evmDapp,
       CONTRACT_ABI,
       signer
     );
@@ -511,8 +467,6 @@ export default function Component() {
 
   const handleSwapAndBridge = async () => {
     try {
-      setTransactionPending(true);
-
       // Validation checks
       if (
         !ContractsConfig.zeta_universalDapp ||
@@ -527,13 +481,17 @@ export default function Component() {
       }
 
       // Step 1: Prepare payloads
+      const recipient = signer.address;
+      const outputToken = selectedOutputToken.address;
       const destinationPayload = encodeDestinationPayload(
-        signer.address,
-        selectedOutputToken.address
+        recipient,
+        outputToken
       );
       const encodedParameters = encodeZetachainPayload(
         selectedNetwork.zrc20Address,
         selectedNetwork.contractAddress,
+        recipient,
+        outputToken,
         destinationPayload
       );
       const revertOptions = {
@@ -554,10 +512,12 @@ export default function Component() {
 
       // Create contract instance
       const contractInstance = new ethers.Contract(
-        CONTRACT_ADDRESS,
+        ContractsConfig.evmDapp,
         CONTRACT_ABI,
         signer
       );
+
+      setTransactionStatus("sourcePending");
 
       // Step 2: Perform swap and bridge transaction
       const tx = await contractInstance.SwapAndBridgeTokens(
@@ -569,9 +529,12 @@ export default function Component() {
         permit.deadline,
         permit.signature
       );
-      console.log("Transaction submitted:", tx.hash);
 
-      setTransactionStatus("source");
+      const receipt = tx.wait();
+
+      console.log("Transaction submitted:", tx.hash, receipt);
+
+      setTransactionStatus("zetaPending");
 
       // Optional: Attach listener for SwappedAndDeposited if intermediate status updates are needed
       contractInstance.on(
@@ -579,9 +542,8 @@ export default function Component() {
         (executor, swaps, totalTokensReceived) => {
           if (executor.toLowerCase() === signer.address.toLowerCase()) {
             // Filter based on signer
-            if (transactionStatus === "source") {
-              setTransactionStatus("zeta");
-            }
+
+            setTransactionStatus("destinationPending");
 
             console.log("SwappedAndDeposited event detected for signer!");
             const totalEther = ethers.utils.formatEther(totalTokensReceived);
@@ -595,7 +557,7 @@ export default function Component() {
         selectedNetwork.rpc
       );
       const readOnlyContractInstance = new ethers.Contract(
-        CONTRACT_ADDRESS,
+        ContractsConfig.evmDapp,
         CONTRACT_ABI,
         localhostProvider
       );
@@ -610,8 +572,7 @@ export default function Component() {
           );
 
           // Mark transaction as complete and show success
-          setTransactionPending(false);
-          setTransactionStatus("destination");
+          setTransactionStatus("completed");
           toast.success(
             "Your tokens have been successfully swapped and bridged!",
             {
@@ -633,7 +594,6 @@ export default function Component() {
       readOnlyContractInstance.on("SwappedAndWithdrawn", onSwappedAndWithdrawn);
     } catch (error) {
       console.error("Swap and bridge failed:", error);
-      setTransactionPending(false);
     }
   };
 
@@ -680,11 +640,7 @@ export default function Component() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRemoveToken(token.symbol)}
-                        disabled={
-                          loading ||
-                          transactionPending ||
-                          transactionStatus === "destination"
-                        }
+                        disabled={loading || transactionStatus !== "notStarted"}
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -695,7 +651,7 @@ export default function Component() {
                       <Input
                         type="number"
                         value={token.amount}
-                        disabled={transactionStatus === "destination"}
+                        disabled={transactionStatus !== "notStarted"}
                         onChange={(e) =>
                           handleAmountChange(token.symbol, e.target.value)
                         }
@@ -706,11 +662,7 @@ export default function Component() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleMaxAmount(token.symbol)}
-                        disabled={
-                          loading ||
-                          transactionPending ||
-                          transactionStatus === "destination"
-                        }
+                        disabled={loading || transactionStatus !== "notStarted"}
                         className={cn(
                           token.isMax && "bg-primary text-primary-foreground"
                         )}
@@ -732,9 +684,7 @@ export default function Component() {
                             size="sm"
                             onClick={() => handleApprovePermit2(token)}
                             disabled={
-                              loading ||
-                              transactionPending ||
-                              transactionStatus === "destination"
+                              loading || transactionStatus !== "notStarted"
                             }
                           >
                             Approve
@@ -770,9 +720,7 @@ export default function Component() {
                             aria-expanded={openToken}
                             className="w-full justify-between"
                             disabled={
-                              loading ||
-                              transactionPending ||
-                              transactionStatus === "destination"
+                              loading || transactionStatus !== "notStarted"
                             }
                           >
                             Select token
@@ -819,11 +767,7 @@ export default function Component() {
                         variant="secondary"
                         size="full"
                         onClick={autoSelectTokens}
-                        disabled={
-                          loading ||
-                          transactionPending ||
-                          transactionStatus === "destination"
-                        }
+                        disabled={loading || transactionStatus !== "notStarted"}
                       >
                         Auto-select
                       </Button>
@@ -850,7 +794,9 @@ export default function Component() {
                 <span className="relative flex h-32	w-32">
                   <span
                     className={`${
-                      transactionPending ? "animate-ping" : ""
+                      !["notStarted", "completed"].includes(transactionStatus)
+                        ? "animate-ping"
+                        : ""
                     } absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75`}
                   ></span>
                   <Image
@@ -863,25 +809,24 @@ export default function Component() {
                 </span>
               </div>
             </ArcherElement>
-            {currentStep ? (
-              <TransactionStatus steps={steps} currentStep={currentStep} />
+            {transactionStatus !== "notStarted" ? (
+              <TransactionStatus state={transactionStatus} />
             ) : (
               <div className="flex items-center justify-center mt-4">
-                {transactionStatus === "destination" ? (
-                  <Button size="lg" onClick={handleReset}>
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    Reset
-                  </Button>
-                ) : (
-                  <SwapPreviewDrawer
-                    selectedTokens={selectedTokens}
-                    selectedNetwork={selectedNetwork}
-                    selectedOutputToken={selectedOutputToken}
-                    disabled={loading || transactionPending}
-                    onConfirm={handleSwapConfirm}
-                  />
-                )}
+                <SwapPreviewDrawer
+                  selectedTokens={selectedTokens}
+                  selectedNetwork={selectedNetwork}
+                  selectedOutputToken={selectedOutputToken}
+                  disabled={loading || transactionStatus !== "notStarted"}
+                  onConfirm={handleSwapConfirm}
+                />
               </div>
+            )}
+            {transactionStatus === "completed" && (
+              <Button size="sm" onClick={handleReset}>
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Reset
+              </Button>
             )}
           </div>
 
@@ -911,9 +856,7 @@ export default function Component() {
                           aria-expanded={openNetwork}
                           className="w-full justify-between"
                           disabled={
-                            loading ||
-                            transactionPending ||
-                            transactionStatus === "destination"
+                            loading || transactionStatus !== "notStarted"
                           }
                         >
                           {selectedNetwork?.label || "Select Network"}
@@ -961,9 +904,8 @@ export default function Component() {
                           className="w-full justify-between"
                           disabled={
                             loading ||
-                            transactionPending ||
                             !selectedNetwork ||
-                            transactionStatus === "destination"
+                            transactionStatus !== "notStarted"
                           }
                         >
                           {selectedOutputToken?.name || "Select Output Token"}

@@ -30,7 +30,7 @@ const Page = () => {
         <ConnectBitcoin />
         <ConnectButton label="Connect EVM" showBalance={true} />
       </div>
-      <div className="bg-gray-900 p-8 mb-36">
+      <div className="p-8 mb-36">
         <ArcherDemo />
       </div>
     </div>
