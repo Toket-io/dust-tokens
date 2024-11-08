@@ -16,59 +16,46 @@ contract Swap is UniversalContract {
     GatewayZEVM public gateway;
     uint256 constant BITCOIN = 18332;
 
+    event Reverted(bytes recipient, address asset, uint256 amount);
+
+    modifier onlyGateway() {
+        require(msg.sender == address(gateway), "Caller is not the gateway");
+        _;
+    }
+
     constructor(address systemContractAddress, address payable gatewayAddress) {
         systemContract = SystemContract(systemContractAddress);
         gateway = GatewayZEVM(gatewayAddress);
     }
 
     struct Params {
-        address target;
-        bytes to;
+        address targetChainToken;
+        bytes targetChainCounterparty;
+        address recipient;
         bytes destinationPayload;
     }
 
-    function onCrossChainCall(
-        zContext calldata context,
+    function onCall(
+        MessageContext calldata,
         address zrc20,
         uint256 amount,
         bytes calldata message
-    ) external override {
-        Params memory params = Params({
-            target: address(0),
-            to: bytes(""),
-            destinationPayload: bytes("")
-        });
-        if (context.chainID == BITCOIN) {
-            params.target = BytesHelperLib.bytesToAddress(message, 0);
-            params.to = abi.encodePacked(
-                BytesHelperLib.bytesToAddress(message, 20)
-            );
-        } else {
-            (
-                address targetToken,
-                bytes memory recipient,
-                bytes memory destinationPayload
-            ) = abi.decode(message, (address, bytes, bytes));
-            params.target = targetToken;
-            params.to = recipient;
-            params.destinationPayload = destinationPayload;
-        }
-
-        swapAndWithdraw(
-            zrc20,
-            amount,
-            params.target,
-            params.to,
+    ) external onlyGateway {
+        Params memory params;
+        (
+            params.targetChainToken,
+            params.targetChainCounterparty,
+            params.recipient,
             params.destinationPayload
-        );
+        ) = abi.decode(message, (address, bytes, address, bytes));
+
+        swapAndWithdraw(zrc20, amount, params);
     }
 
     function swapAndWithdraw(
         address inputToken,
         uint256 amount,
-        address targetToken,
-        bytes memory recipient,
-        bytes memory payload
+        Params memory params
     ) internal {
         uint256 inputForGas;
         address gasZRC20;
@@ -78,9 +65,8 @@ contract Swap is UniversalContract {
         uint256 gasLimit = 7000000; // TODO: set correct gas limit
 
         // Get the gas fee required for withdrawal and call
-        (gasZRC20, gasFee) = IZRC20(targetToken).withdrawGasFeeWithGasLimit(
-            gasLimit
-        );
+        (gasZRC20, gasFee) = IZRC20(params.targetChainToken)
+            .withdrawGasFeeWithGasLimit(gasLimit);
 
         // Calculate the amount left after covering gas fees
         if (gasZRC20 == inputToken) {
@@ -98,12 +84,12 @@ contract Swap is UniversalContract {
 
         // Perform the token swap if the input and target tokens are different
         uint256 outputAmount;
-        if (inputToken != targetToken) {
+        if (inputToken != params.targetChainToken) {
             outputAmount = SwapHelperLib.swapExactTokensForTokens(
                 systemContract,
                 inputToken,
                 swapAmount,
-                targetToken,
+                params.targetChainToken,
                 0
             );
         } else {
@@ -111,32 +97,68 @@ contract Swap is UniversalContract {
         }
 
         // Approve the gateway to spend the tokens
-        if (gasZRC20 == targetToken) {
+        if (gasZRC20 == params.targetChainToken) {
             IZRC20(gasZRC20).approve(address(gateway), outputAmount + gasFee);
         } else {
             IZRC20(gasZRC20).approve(address(gateway), gasFee);
-            IZRC20(targetToken).approve(address(gateway), outputAmount);
+            IZRC20(params.targetChainToken).approve(
+                address(gateway),
+                outputAmount
+            );
         }
 
         // Prepare the revert options
         RevertOptions memory revertOptions = RevertOptions({
-            revertAddress: address(0),
-            callOnRevert: false,
+            revertAddress: address(this),
+            callOnRevert: true,
+            abortAddress: address(0),
+            revertMessage: abi.encode(params.recipient),
+            onRevertGasLimit: 0
+        });
+
+        // Execute the withdrawal and call operation via the gateway
+        CallOptions memory callOptions = CallOptions(gasLimit, true);
+        gateway.withdrawAndCall(
+            params.targetChainCounterparty,
+            outputAmount,
+            params.targetChainToken,
+            params.destinationPayload,
+            callOptions,
+            revertOptions
+        );
+    }
+
+    function onRevert(
+        RevertContext calldata revertContext
+    ) external payable onlyGateway {
+        // Transfer the reverted tokens back to the contract
+        IZRC20(revertContext.asset).transfer(
+            address(this),
+            revertContext.amount
+        );
+
+        // Decode the revert message
+        bytes memory recipient = abi.decode(
+            revertContext.revertMessage,
+            (bytes)
+        );
+
+        RevertOptions memory revertOptions = RevertOptions({
+            revertAddress: address(this),
+            callOnRevert: true,
             abortAddress: address(0),
             revertMessage: "",
             onRevertGasLimit: 0
         });
 
-        // Execute the withdrawal and call operation via the gateway
-        gateway.withdrawAndCall(
+        // Withdraw the tokens to the original recipient
+        gateway.withdraw(
             recipient,
-            outputAmount,
-            targetToken,
-            payload,
-            gasLimit,
+            revertContext.amount,
+            revertContext.asset,
             revertOptions
         );
-    }
 
-    function onRevert(RevertContext calldata revertContext) external override {}
+        emit Reverted(recipient, revertContext.asset, revertContext.amount);
+    }
 }

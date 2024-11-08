@@ -88,7 +88,6 @@ const preparePermitData = async (
   // Get the chainId (Sepolia = 11155111)
   const network = await provider.getNetwork();
   const chainId = network.chainId;
-  console.log("ChainID:", chainId);
 
   // Generate the permit return data & sign it
   const { domain, types, values } = SignatureTransfer.getPermitData(
