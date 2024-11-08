@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { Check, ChevronsUpDown, Coins, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,6 +32,7 @@ import { provider, signer } from "@/app/page";
 import ContractsConfig from "../../../ContractsConfig";
 import { toast } from "sonner";
 import { SignatureTransfer, PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
+import TransactionStatus from "./TransactionStatus";
 
 const containerStyle = {
   display: "flex",
@@ -80,6 +81,13 @@ export type Network = {
   zrc20Address: string;
   nativeToken: Token;
 };
+
+export type Step = "source" | "zeta" | "destination";
+export type Status = "idle" | "pending" | "success" | "error";
+
+export interface StepStatus {
+  status: Status;
+}
 
 const CONTRACT_ADDRESS = "0x12604a5B388a1E1834693bfe94dDdF81A60B56A2";
 
@@ -145,6 +153,52 @@ export default function Component() {
     "source" | "zeta" | "destination" | null
   >(null);
 
+  const [steps, setSteps] = useState<Record<Step, StepStatus>>({
+    source: { status: "idle" },
+    zeta: { status: "idle" },
+    destination: { status: "idle" },
+  });
+  const [currentStep, setCurrentStep] = useState<Step | null>(null);
+  const updateStep = useCallback((step: Step, status: Status) => {
+    setSteps((prevSteps) => ({
+      ...prevSteps,
+      [step]: { status },
+    }));
+  }, []);
+
+  const resetTransaction = useCallback(() => {
+    setSteps({
+      source: { status: "idle" },
+      zeta: { status: "idle" },
+      destination: { status: "idle" },
+    });
+    setCurrentStep(null);
+  }, []);
+
+  const simulateStepProcess = useCallback(
+    async (step: Step) => {
+      updateStep(step, "pending");
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Simulating API call
+      const success = Math.random() > 0.2; // 80% success rate
+      updateStep(step, success ? "success" : "error");
+      return success;
+    },
+    [updateStep]
+  );
+
+  const startTransaction = useCallback(async () => {
+    resetTransaction();
+    const steps: Step[] = ["source", "zeta", "destination"];
+
+    for (const step of steps) {
+      setCurrentStep(step);
+      const success = await simulateStepProcess(step);
+      if (!success) break;
+    }
+
+    setCurrentStep(null);
+  }, [resetTransaction, simulateStepProcess]);
+
   useEffect(() => {
     const initializeProvider = async () => {
       fetchBalances();
@@ -164,6 +218,7 @@ export default function Component() {
   const handleSwapConfirm = async () => {
     setTransactionPending(true);
     await handleSwapAndBridge();
+    startTransaction();
   };
 
   const handleSelectToken = (token: Token) => {
@@ -806,41 +861,9 @@ export default function Component() {
                     className="relative inline-flex rounded-full h-32 w-32"
                   />
                 </span>
-
-                {transactionStatus && (
-                  <div className="flex items-center justify-center mt-4">
-                    <div className="flex items-center space-x-2">
-                      <div
-                        className={cn(
-                          "h-4 w-4 rounded-full",
-                          ["source", "zeta", "destination"].includes(
-                            transactionStatus
-                          )
-                            ? "bg-green-400"
-                            : "bg-gray-300"
-                        )}
-                      ></div>
-                      <div
-                        className={cn(
-                          "h-4 w-4 rounded-full",
-                          ["zeta", "destination"].includes(transactionStatus)
-                            ? "bg-green-400"
-                            : "bg-gray-300"
-                        )}
-                      ></div>
-                      <div
-                        className={cn(
-                          "h-4 w-4 rounded-full",
-                          transactionStatus === "destination"
-                            ? "bg-green-400"
-                            : "bg-gray-300"
-                        )}
-                      ></div>
-                    </div>
-                  </div>
-                )}
               </div>
             </ArcherElement>
+            <TransactionStatus steps={steps} currentStep={currentStep} />
           </div>
 
           {/* Additional element to the right of the root */}
@@ -980,11 +1003,6 @@ export default function Component() {
             onConfirm={handleSwapConfirm}
           />
         )}
-      </div>
-      <div>
-        <Button onClick={signPermit2BatchApproval}>
-          Test approve with Permit2
-        </Button>
       </div>
     </div>
   );

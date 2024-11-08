@@ -17,11 +17,11 @@ const PRIVATE_KEY =
 export const signer = new ethers.Wallet(PRIVATE_KEY, provider);
 
 // // Get the MetaMask provider
-// const provider = new ethers.providers.Web3Provider(window.ethereum);
+// export const provider = new ethers.providers.Web3Provider(window.ethereum);
 
 // // Request MetaMask to connect and get the signer (current connected account)
-// await provider.send("eth_requestAccounts", []); // Request connection
-// const signer = provider.getSigner(); // Get the signer from MetaMask
+// // await provider.send("eth_requestAccounts", []); // Request connection
+// export const signer = provider.getSigner(); // Get the signer from MetaMask
 
 const Page = () => {
   return (
