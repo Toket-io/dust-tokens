@@ -283,35 +283,6 @@ contract EvmDustTokens is Ownable {
         }
     }
 
-    // Permit 2 Debugging
-    // Normal SignatureTransfer
-    function signatureTransfer(
-        address token,
-        uint256 amount,
-        uint256 nonce,
-        uint256 deadline,
-        bytes calldata signature
-    ) public {
-        permit2.permitTransferFrom(
-            // The permit message. Spender is inferred as the caller (this contract)
-            ISignatureTransfer.PermitTransferFrom({
-                permitted: ISignatureTransfer.TokenPermissions({
-                    token: token,
-                    amount: amount
-                }),
-                nonce: nonce,
-                deadline: deadline
-            }),
-            // Transfer details
-            ISignatureTransfer.SignatureTransferDetails({
-                to: address(this),
-                requestedAmount: amount
-            }),
-            msg.sender, // The owner of the tokens has to be the signer
-            signature // The resulting signature from signing hash of permit data per EIP-712 standards
-        );
-    }
-
     // Batch SignatureTransfer
     function signatureBatchTransfer(
         SwapInput[] calldata swaps,

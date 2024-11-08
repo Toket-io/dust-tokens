@@ -5,6 +5,12 @@ import { BigNumber, Contract } from "ethers";
 import hre from "hardhat";
 
 import ContractsConfig from "../../ContractsConfig";
+import {
+  encodeDestinationPayload,
+  encodeZetachainPayload,
+  preparePermitData,
+  TokenSwap,
+} from "../../web/src/lib/zetachainUtils";
 import { EvmDustTokens, SimpleSwap, Swap } from "../typechain-types";
 
 const DAI_DECIMALS = 18;
@@ -41,11 +47,6 @@ const ercAbi = [
   "function withdraw(uint256 wad) external",
 ];
 
-type TokenSwap = {
-  amount: BigNumber;
-  token: string;
-};
-
 describe("EvmDustTokens", function () {
   let signer: SignerWithAddress;
   let receiver: SignerWithAddress;
@@ -68,59 +69,6 @@ describe("EvmDustTokens", function () {
   let ZETA_ETH: Contract;
 
   // MARK: Helper Functions
-  const encodeDestinationPayload = (
-    recipient: string,
-    outputToken: string
-  ): string => {
-    const destinationPayloadTypes = ["address", "address"];
-    const destinationFunctionParams = hre.ethers.utils.defaultAbiCoder.encode(
-      destinationPayloadTypes,
-      [outputToken, recipient]
-    );
-
-    const functionName = "ReceiveTokens(address,address)";
-    const functionSignature = hre.ethers.utils.id(functionName).slice(0, 10);
-    const destinationPayload = hre.ethers.utils.hexlify(
-      hre.ethers.utils.concat([functionSignature, destinationFunctionParams])
-    );
-
-    return destinationPayload;
-  };
-
-  const encodeZetachainPayload = (
-    outputChainToken: string,
-    destinationContract: string,
-    destinationPayload: string
-  ) => {
-    const args = {
-      types: ["address", "bytes", "bytes"],
-      values: [outputChainToken, destinationContract, destinationPayload],
-    };
-
-    // Prepare encoded parameters for the call
-    const valuesArray = args.values.map((value, index) => {
-      const type = args.types[index];
-      if (type === "bool") {
-        try {
-          return JSON.parse(value.toLowerCase());
-        } catch (e) {
-          throw new Error(`Invalid boolean value: ${value}`);
-        }
-      } else if (type.startsWith("uint") || type.startsWith("int")) {
-        return hre.ethers.BigNumber.from(value);
-      } else {
-        return value;
-      }
-    });
-
-    const encodedParameters = hre.ethers.utils.defaultAbiCoder.encode(
-      args.types,
-      valuesArray
-    );
-
-    return encodedParameters;
-  };
-
   const approveTokens = async (tokenSwaps: TokenSwap[]) => {
     for (const swap of tokenSwaps) {
       const contract = new hre.ethers.Contract(swap.token, ercAbi, signer);
@@ -143,29 +91,10 @@ describe("EvmDustTokens", function () {
   }
 
   const signPermit = async (swaps: TokenSwap[]) => {
-    const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
-    const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
-
-    // Create the permit object for batched transfers
-    const permit = {
-      deadline: deadline,
-      nonce: nonce,
-      permitted: swaps.map((s) => {
-        return { amount: s.amount, token: s.token };
-      }),
-      spender: dustTokens.address,
-    };
-
-    // Get the chainId (Sepolia = 11155111)
-    const network = await hre.ethers.provider.getNetwork();
-    const chainId = network.chainId;
-    console.log("ChainID:", chainId);
-
-    // Generate the permit return data & sign it
-    const { domain, types, values } = SignatureTransfer.getPermitData(
-      permit,
-      PERMIT2_ADDRESS,
-      chainId
+    const { domain, types, values, deadline, nonce } = await preparePermitData(
+      hre.ethers.provider,
+      swaps,
+      dustTokens.address
     );
     const signature = await signer._signTypedData(domain, types, values);
 
@@ -328,6 +257,8 @@ describe("EvmDustTokens", function () {
     const encodedParameters = encodeZetachainPayload(
       ZETA_ETH_ADDRESS,
       dustTokens.address,
+      receiver.address,
+      outputTokenContract.address,
       destinationPayload
     );
 
@@ -411,6 +342,8 @@ describe("EvmDustTokens", function () {
     const encodedParameters = encodeZetachainPayload(
       ZETA_ETH_ADDRESS,
       dustTokens.address,
+      receiver.address,
+      outputTokenContractAddress,
       destinationPayload
     );
 
@@ -581,67 +514,6 @@ describe("EvmDustTokens", function () {
     expect(await dustTokens.isTokenWhitelisted(LINK.address)).to.be.true;
     expect(await dustTokens.isTokenWhitelisted(UNI.address)).to.be.true;
     expect(await dustTokens.isTokenWhitelisted(WBTC.address)).to.be.true;
-  });
-
-  // MARK: Permit2 Tests
-  it("Should deposit single token with Permit2 signature transfer", async function () {
-    try {
-      // declare needed vars
-      const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
-      const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
-      // permit amount MUST match passed in signature transfer amount,
-      // unlike with AllowanceTransfer where permit amount can be uint160.max
-      // while the actual transfer amount can be less.
-      const token = DAI;
-      const amount = hre.ethers.utils.parseUnits("123", 18);
-
-      // create permit object
-      const permit = {
-        deadline: deadline,
-        nonce: nonce,
-        permitted: {
-          amount: amount,
-          token: token.address,
-        },
-        spender: dustTokens.address,
-      };
-      console.log("permit object:", permit);
-
-      // Get the chainId (Sepolia = 11155111)
-      const network = await hre.ethers.provider.getNetwork();
-      const chainId = network.chainId;
-      console.log("ChainID:", chainId);
-
-      // Generate the permit return data & sign it
-      const { domain, types, values } = SignatureTransfer.getPermitData(
-        permit,
-        PERMIT2_ADDRESS,
-        chainId
-      );
-      const signature = await signer._signTypedData(domain, types, values);
-      console.log("Signature:", signature);
-
-      // Call our `signatureTransfer()` function with correct data and signature
-      const tx = await dustTokens.signatureTransfer(
-        token.address,
-        amount,
-        nonce,
-        deadline,
-        signature
-      );
-      console.log("Transfer with permit tx sent:", tx.hash);
-      await tx.wait();
-      console.log("Tx confirmed");
-
-      // Verify the balance
-      const balance = await token.balanceOf(dustTokens.address);
-      expect(balance).to.equal(amount);
-
-      console.log("Permit2App transfer completed: ", balance);
-    } catch (error) {
-      console.error("signatureTransfer error:", error);
-      throw error;
-    }
   });
 
   it("Should deposit multiple tokens with Permit2 batch signature transfer", async function () {

@@ -33,30 +33,11 @@ import ContractsConfig from "../../../ContractsConfig";
 import { toast } from "sonner";
 import { SignatureTransfer, PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import TransactionStatus from "./TransactionStatus";
-
-const containerStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  height: "100%",
-  width: "100%",
-  margin: "50px 0",
-};
-
-const columnStyle = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  flex: 1,
-};
-
-const rootContainerStyle = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  flex: 1,
-};
+import {
+  encodeDestinationPayload,
+  encodeZetachainPayload,
+  preparePermitData,
+} from "@/lib/zetachainUtils";
 
 export interface Token {
   name: string;
@@ -125,8 +106,6 @@ const networks: Network[] = [
 const CONTRACT_ABI = [
   "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
   "function hasPermit2Allowance(address user, address token, uint256 requiredAmount) view returns (bool)",
-  "function addToken(address token) public",
-  "function removeToken(address token) public",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
   "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions, uint256 nonce, uint256 deadline, bytes signature) public",
   "function signatureBatchTransfer((address token, uint256 amount)[], uint256 nonce, uint256 deadline, bytes signature)",
@@ -340,130 +319,16 @@ export default function Component() {
     }
   };
 
-  // MARK: Helper Functions
-  const encodeDestinationPayload = (
-    recipient: string,
-    outputToken: string
-  ): string => {
-    const destinationPayloadTypes = ["address", "address"];
-    const destinationFunctionParams = ethers.utils.defaultAbiCoder.encode(
-      destinationPayloadTypes,
-      [outputToken, recipient]
-    );
-
-    const functionName = "ReceiveTokens(address,address)";
-    const functionSignature = ethers.utils.id(functionName).slice(0, 10);
-    const destinationPayload = ethers.utils.hexlify(
-      ethers.utils.concat([functionSignature, destinationFunctionParams])
-    );
-
-    return destinationPayload;
-  };
-
-  const encodeZetachainPayload = (
-    targetChainToken: string,
-    targetChainCounterparty: string,
-    recipient: string,
-    outputToken: string,
-    destinationPayload: string
-  ) => {
-    const args = {
-      types: ["address", "bytes", "address", "address", "bytes"],
-      values: [
-        targetChainToken,
-        targetChainCounterparty,
-        recipient,
-        outputToken,
-        destinationPayload,
-      ],
-    };
-
-    // Prepare encoded parameters for the call
-    const valuesArray = args.values.map((value, index) => {
-      const type = args.types[index];
-      if (type === "bool") {
-        try {
-          return JSON.parse(value.toLowerCase());
-        } catch (e) {
-          throw new Error(`Invalid boolean value: ${value}`);
-        }
-      } else if (type.startsWith("uint") || type.startsWith("int")) {
-        return ethers.BigNumber.from(value);
-      } else {
-        return value;
-      }
-    });
-
-    const encodedParameters = ethers.utils.defaultAbiCoder.encode(
-      args.types,
-      valuesArray
-    );
-
-    return encodedParameters;
-  };
-
-  const signPermit = async (swaps) => {
-    const nonce = Math.floor(Math.random() * 1e15); // 1 quadrillion potential nonces
-    const deadline = calculateEndTime(30 * 60 * 1000); // 30 minute sig deadline
-
-    // Create the permit object for batched transfers
-    const permit = {
-      deadline: deadline,
-      nonce: nonce,
-      permitted: swaps.map((s) => {
-        return { amount: s.amount, token: s.token };
-      }),
-      spender: ContractsConfig.evmDapp,
-    };
-
-    console.log("permit object:", permit);
-
-    // Get the chainId (Sepolia = 11155111)
-    const network = await provider.getNetwork();
-    const chainId = network.chainId;
-    console.log("ChainID:", chainId);
-
-    // Generate the permit return data & sign it
-    const { domain, types, values } = SignatureTransfer.getPermitData(
-      permit,
-      PERMIT2_ADDRESS,
-      chainId
+  const signPermit = async (swaps: TokenSwap[]) => {
+    const { domain, types, values, deadline, nonce } = await preparePermitData(
+      provider,
+      swaps,
+      ContractsConfig.evmDapp
     );
     const signature = await signer._signTypedData(domain, types, values);
 
     return { deadline, nonce, signature };
   };
-
-  const signPermit2BatchApproval = async () => {
-    const tokenSwaps = selectedTokens.map(({ amount, decimals, address }) => ({
-      amount: ethers.utils.parseUnits(amount, decimals),
-      token: address,
-    }));
-
-    const permit = await signPermit(tokenSwaps);
-
-    const contractInstance = new ethers.Contract(
-      ContractsConfig.evmDapp,
-      CONTRACT_ABI,
-      signer
-    );
-
-    // Call our `signatureTransfer()` function with correct data and signature
-    const tx = await contractInstance.signatureBatchTransfer(
-      tokenSwaps,
-      permit.nonce,
-      permit.deadline,
-      permit.signature
-    );
-
-    tx.wait();
-
-    console.log("Signature Transfer TX:", tx.hash);
-  };
-
-  function calculateEndTime(duration: number) {
-    return Math.floor((Date.now() + duration) / 1000);
-  }
 
   const handleSwapAndBridge = async () => {
     try {
@@ -617,9 +482,9 @@ export default function Component() {
   return (
     <div>
       <ArcherContainer strokeColor="white">
-        <div style={containerStyle}>
-          {/* Left column with elements */}
-          <div style={columnStyle}>
+        <div className="flex justify-between items-center height-full width-full">
+          {/* Source chain settings */}
+          <div className="flex flex-col flex-1 items-center justify-center">
             {selectedTokens.map((token, i) => (
               <ArcherElement
                 key={`element${i}`}
@@ -671,28 +536,6 @@ export default function Component() {
                       </Button>
                     </div>
                   </CardContent>
-                  <CardFooter>
-                    <div className="flex justify-between items-center w-full">
-                      <span className="text-xs">
-                        Balance: {token.balance.toFixed(2)}
-                      </span>
-                      <span className="text-xs text-red-500">
-                        {token.hasPermit2Allowance ? "" : "Missing Permit2"}
-                        {!token.hasPermit2Allowance && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleApprovePermit2(token)}
-                            disabled={
-                              loading || transactionStatus !== "notStarted"
-                            }
-                          >
-                            Approve
-                          </Button>
-                        )}
-                      </span>
-                    </div>
-                  </CardFooter>
                 </Card>
               </ArcherElement>
             ))}
@@ -778,8 +621,8 @@ export default function Component() {
             </ArcherElement>
           </div>
 
-          {/* Root element in the center */}
-          <div style={rootContainerStyle}>
+          {/* Zetachain Logo */}
+          <div className="flex flex-col flex-1 items-center justify-center">
             <ArcherElement
               id="root"
               relations={[
@@ -830,8 +673,8 @@ export default function Component() {
             )}
           </div>
 
-          {/* Additional element to the right of the root */}
-          <div style={columnStyle} className="space-y-16">
+          {/* Destination chain settings */}
+          <div className="flex flex-col flex-1 items-center justify-center">
             <ArcherElement
               id="center-element"
               relations={[

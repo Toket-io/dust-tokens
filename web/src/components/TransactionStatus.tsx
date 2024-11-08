@@ -9,6 +9,7 @@ interface TransactionStatusProps {
 }
 
 const stateDescriptions: Record<TransactionState, string> = {
+  notStarted: "",
   sourcePending: "Processing source chain transaction...",
   zetaPending: "Source chain completed. Processing Zeta chain transaction...",
   destinationPending:
