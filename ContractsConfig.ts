@@ -6,6 +6,7 @@ interface ZetachainContracts {
   evm_zetaToken: `0x${string}`;
   evm_usdcToken: `0x${string}`;
   evm_uniswapRouterV3: `0x${string}`;
+  evm_uniswapQuoter: `0x${string}`;
   evmDapp: `0x${string}`;
 
   // ZetaChain Side
@@ -53,6 +54,7 @@ const arbitrumForkedLocalnetConfig: ZetachainContracts = {
   evm_zetaToken: "0x90Dd5250fD06b9E6E3d048cAF7f26Da609cb67cC",
   evm_usdcToken: "0xDeb76598eDce92ae77F2D4f88542ED2C91b8De82",
   evm_uniswapRouterV3: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+  evm_uniswapQuoter: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6",
   evmDapp: "0x27F9aFE3B3fCb63ae1A6c662331698F2183809bF",
 
   // ZetaChain Side

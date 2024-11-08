@@ -37,7 +37,7 @@ const containerStyle = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  height: "600px",
+  height: "100%",
   width: "100%",
   margin: "50px 0",
 };
@@ -116,8 +116,6 @@ const networks: Network[] = [
   },
 ];
 
-// Replace with your deployed contract's address and ABI
-
 const CONTRACT_ABI = [
   "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
   "function hasPermit2Allowance(address user, address token, uint256 requiredAmount) view returns (bool)",
@@ -129,10 +127,6 @@ const CONTRACT_ABI = [
   "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
   "event SwappedAndWithdrawn(address indexed receiver, address outputToken, uint256 totalTokensReceived)",
 ];
-
-const UNIVERSAL_APP_ADDRESS = "0xce33621C656f68fC35A461B7c9B09d90B9a1d548";
-
-const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
 
 export default function Component() {
   const [balances, setBalances] = useState<Token[]>([]);
@@ -179,7 +173,7 @@ export default function Component() {
     ) {
       setSelectedTokens([
         ...selectedTokens,
-        { ...token, amount: "", isMax: false, hasPermit2Allowance: false },
+        { ...token, amount: "", isMax: false, hasPermit2Allowance: true },
       ]);
     } else {
       setSelectedTokens(
@@ -234,7 +228,7 @@ export default function Component() {
     let hasPermit2Allowance = true;
     if (selectedToken && amount !== "") {
       console.log("CHECKING PERMIT2 ALLOWANCE: ", selectedToken);
-      hasPermit2Allowance = await contractInstance.hasPermit2Allowance(
+      await contractInstance.hasPermit2Allowance(
         signer.address,
         selectedToken.address,
         ethers.utils.parseUnits(amount, selectedToken.decimals)
@@ -466,8 +460,7 @@ export default function Component() {
 
       // Validation checks
       if (
-        !UNIVERSAL_APP_ADDRESS ||
-        !ZETA_USDC_ETH_ADDRESS ||
+        !ContractsConfig.zeta_universalDapp ||
         !signer ||
         !signer.address ||
         !selectedNetwork ||
@@ -514,7 +507,7 @@ export default function Component() {
       // Step 2: Perform swap and bridge transaction
       const tx = await contractInstance.SwapAndBridgeTokens(
         tokenSwaps,
-        UNIVERSAL_APP_ADDRESS,
+        ContractsConfig.zeta_universalDapp,
         encodedParameters,
         revertOptions,
         permit.nonce,
