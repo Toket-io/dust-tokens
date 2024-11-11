@@ -69,6 +69,12 @@ contract EvmDustTokens is Ownable {
         address outputToken,
         uint256 totalTokensReceived
     );
+    event Reverted(address recipient, address asset, uint256 amount);
+
+    modifier onlyGateway() {
+        require(msg.sender == address(gateway), "Caller is not the gateway");
+        _;
+    }
 
     constructor(
         address payable gatewayAddress,
@@ -148,7 +154,7 @@ contract EvmDustTokens is Ownable {
             revertAddress: address(this),
             callOnRevert: true,
             abortAddress: address(0),
-            revertMessage: "",
+            revertMessage: abi.encode(msg.sender),
             onRevertGasLimit: 0
         });
         gateway.depositAndCall{value: totalTokensReceived}(
@@ -349,6 +355,32 @@ contract EvmDustTokens is Ownable {
             transferDetails,
             msg.sender, // The owner of the tokens
             signature
+        );
+    }
+
+    function onRevert(
+        RevertContext calldata revertContext
+    ) external payable onlyGateway {
+        // Decode the revert message
+        address originalSender = abi.decode(
+            revertContext.revertMessage,
+            (address)
+        );
+
+        // Transfer the reverted tokens back to the contract
+        if (revertContext.asset == address(0)) {
+            originalSender.call{value: revertContext.amount}("");
+        } else {
+            IERC20(revertContext.asset).transfer(
+                address(this),
+                revertContext.amount
+            );
+        }
+
+        emit Reverted(
+            originalSender,
+            revertContext.asset,
+            revertContext.amount
         );
     }
 }

@@ -49,6 +49,8 @@ contract Swap is UniversalContract {
             params.destinationPayload
         ) = abi.decode(message, (address, bytes, bytes, bytes));
 
+        require(params.targetChainToken != address(0), "Invalid target token");
+
         swapAndWithdraw(zrc20, amount, params);
     }
 
@@ -113,7 +115,7 @@ contract Swap is UniversalContract {
             callOnRevert: true,
             abortAddress: address(0),
             revertMessage: abi.encode(params.recipient),
-            onRevertGasLimit: 7000000
+            onRevertGasLimit: 0
         });
 
         // Execute the withdrawal and call operation via the gateway

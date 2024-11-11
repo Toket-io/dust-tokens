@@ -442,6 +442,74 @@ describe("EvmDustTokens", function () {
     expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
   });
 
+  it("Should revert on Zeta chain and return input tokens to sender", async function () {
+    // Step 0: Set unsoported output token
+    const outputTokenContract = "0x25d887Ce7a35172C62FeBFD67a1856F20FaEbB00"; // PEPE token
+
+    // Step 1: Create destination chain payload
+    const destinationPayload = encodeDestinationPayload(
+      receiver.address,
+      outputTokenContract
+    );
+
+    // Step 2: Create invalid Zetachain payload to trigger revert
+    const encodedParameters = encodeZetachainPayload(
+      "0x0000000000000000000000000000000000000000",
+      dustTokens.address,
+      receiver.address,
+      destinationPayload
+    );
+
+    // Step 3: Create input token swaps
+    const swaps: TokenSwap[] = [
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: DAI.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: LINK.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: UNI.address,
+      },
+    ];
+
+    // Step 4: Sign permit
+    const permit = await signPermit(swaps);
+
+    // Step 5: Save the start balance of the receiver
+    const signerStartBalance = await signer.getBalance();
+
+    // Step 6: Execute SwapAndBridgeTokens
+    const tx = await dustTokens.SwapAndBridgeTokens(
+      swaps,
+      universalApp.address,
+      encodedParameters,
+      permit.nonce,
+      permit.deadline,
+      permit.signature
+    );
+    const receipt = await tx.wait();
+
+    // Step 7: Check that the receipt includes the event SwappedAndDeposited
+    const depositEvent = receipt.events?.find(
+      (e) => e.event === "SwappedAndDeposited"
+    );
+
+    expect(tx).not.reverted;
+    expect(depositEvent).exist;
+
+    // Wait for 5 second
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Step 8: Check the orignal sender has received the tokens back
+    const signerBalance = await signer.getBalance();
+
+    expect(signerBalance).to.be.greaterThan(signerStartBalance);
+  });
+
   it("Should receive tokens and send native gas ", async function () {
     // Step 0: Output token
     const outputTokenContractAddress =
