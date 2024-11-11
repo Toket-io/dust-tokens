@@ -31,7 +31,7 @@ contract Swap is UniversalContract {
     struct Params {
         address targetChainToken;
         bytes targetChainCounterparty;
-        address recipient;
+        bytes recipient;
         bytes destinationPayload;
     }
 
@@ -47,7 +47,7 @@ contract Swap is UniversalContract {
             params.targetChainCounterparty,
             params.recipient,
             params.destinationPayload
-        ) = abi.decode(message, (address, bytes, address, bytes));
+        ) = abi.decode(message, (address, bytes, bytes, bytes));
 
         swapAndWithdraw(zrc20, amount, params);
     }
@@ -113,7 +113,7 @@ contract Swap is UniversalContract {
             callOnRevert: true,
             abortAddress: address(0),
             revertMessage: abi.encode(params.recipient),
-            onRevertGasLimit: 0
+            onRevertGasLimit: 7000000
         });
 
         // Execute the withdrawal and call operation via the gateway
@@ -131,11 +131,11 @@ contract Swap is UniversalContract {
     function onRevert(
         RevertContext calldata revertContext
     ) external payable onlyGateway {
+        address targetToken = revertContext.asset;
+        uint256 amount = revertContext.amount;
+
         // Transfer the reverted tokens back to the contract
-        IZRC20(revertContext.asset).transfer(
-            address(this),
-            revertContext.amount
-        );
+        IZRC20(targetToken).transfer(address(this), amount);
 
         // Decode the revert message
         bytes memory recipient = abi.decode(
@@ -151,14 +151,18 @@ contract Swap is UniversalContract {
             onRevertGasLimit: 0
         });
 
-        // Withdraw the tokens to the original recipient
-        gateway.withdraw(
-            recipient,
-            revertContext.amount,
-            revertContext.asset,
-            revertOptions
-        );
+        address gasZRC20;
+        uint256 gasFee;
 
-        emit Reverted(recipient, revertContext.asset, revertContext.amount);
+        (gasZRC20, gasFee) = IZRC20(targetToken).withdrawGasFee();
+
+        uint256 outputAmount = amount - gasFee;
+
+        IZRC20(gasZRC20).approve(address(gateway), outputAmount + gasFee);
+
+        // Withdraw the tokens to the original recipient
+        gateway.withdraw(recipient, outputAmount, targetToken, revertOptions);
+
+        emit Reverted(recipient, targetToken, outputAmount);
     }
 }

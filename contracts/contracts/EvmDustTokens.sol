@@ -89,7 +89,6 @@ contract EvmDustTokens is Ownable {
         SwapInput[] calldata swaps,
         address universalApp,
         bytes calldata payload,
-        RevertOptions calldata revertOptions,
         uint256 nonce,
         uint256 deadline,
         bytes calldata signature
@@ -144,6 +143,14 @@ contract EvmDustTokens is Ownable {
 
         IWETH(WETH9).withdraw(totalTokensReceived);
 
+        // Prepare the revert options
+        RevertOptions memory revertOptions = RevertOptions({
+            revertAddress: address(this),
+            callOnRevert: true,
+            abortAddress: address(0),
+            revertMessage: "",
+            onRevertGasLimit: 0
+        });
         gateway.depositAndCall{value: totalTokensReceived}(
             universalApp,
             payload,

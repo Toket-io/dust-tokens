@@ -1,7 +1,7 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { PERMIT2_ADDRESS, SignatureTransfer } from "@uniswap/Permit2-sdk";
+import { PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import { expect } from "chai";
-import { BigNumber, Contract } from "ethers";
+import { Contract } from "ethers";
 import hre from "hardhat";
 
 import ContractsConfig from "../../ContractsConfig";
@@ -9,6 +9,7 @@ import {
   encodeDestinationPayload,
   encodeZetachainPayload,
   preparePermitData,
+  readLocalnetAddresses,
   TokenSwap,
 } from "../../web/src/lib/zetachainUtils";
 import { EvmDustTokens, SimpleSwap, Swap } from "../typechain-types";
@@ -16,14 +17,26 @@ import { EvmDustTokens, SimpleSwap, Swap } from "../typechain-types";
 const DAI_DECIMALS = 18;
 const USDC_DECIMALS = 6;
 
-const GATEWAY_ADDRESS: string = ContractsConfig.evm_gateway;
+// EVM Gateway
+const GATEWAY_ADDRESS: string = readLocalnetAddresses("ethereum", "gatewayEVM");
 
 // Zetachain Contracts
-const ZETA_GATEWAY_ADDRESS: string = ContractsConfig.zeta_gateway;
-const ZETA_SYSTEM_CONTRACT_ADDRESS: string =
-  ContractsConfig.zeta_systemContract;
-const ZETA_USDC_ETH_ADDRESS: string = ContractsConfig.zeta_usdcEthToken;
-const ZETA_ETH_ADDRESS: string = ContractsConfig.zeta_ethEthToken;
+const ZETA_GATEWAY_ADDRESS: string = readLocalnetAddresses(
+  "zetachain",
+  "gatewayZEVM"
+);
+const ZETA_SYSTEM_CONTRACT_ADDRESS: string = readLocalnetAddresses(
+  "zetachain",
+  "systemContract"
+);
+const ZETA_USDC_ETH_ADDRESS: string = readLocalnetAddresses(
+  "zetachain",
+  "ZRC-20 USDC on 5"
+);
+const ZETA_ETH_ADDRESS: string = readLocalnetAddresses(
+  "zetachain",
+  "ZRC-20 ETH on 5"
+);
 
 const WETH_ADDRESS: string = ContractsConfig.evm_weth ?? "";
 const DAI_ADDRESS: string = process.env.DAI_ADDRESS ?? "";
@@ -69,27 +82,6 @@ describe("EvmDustTokens", function () {
   let ZETA_ETH: Contract;
 
   // MARK: Helper Functions
-  const approveTokens = async (tokenSwaps: TokenSwap[]) => {
-    for (const swap of tokenSwaps) {
-      const contract = new hre.ethers.Contract(swap.token, ercAbi, signer);
-      const approveTx = await contract.approve(dustTokens.address, swap.amount);
-      await approveTx.wait();
-
-      const tokenName = await contract.name();
-      const tokenDecimals = await contract.decimals();
-      const formattedAmount = hre.ethers.utils.formatUnits(
-        swap.amount,
-        tokenDecimals
-      );
-
-      console.log(`${tokenName} approved ${formattedAmount}`);
-    }
-  };
-
-  function calculateEndTime(duration: number) {
-    return Math.floor((Date.now() + duration) / 1000);
-  }
-
   const signPermit = async (swaps: TokenSwap[]) => {
     const { domain, types, values, deadline, nonce } = await preparePermitData(
       hre.ethers.provider,
@@ -258,7 +250,6 @@ describe("EvmDustTokens", function () {
       ZETA_ETH_ADDRESS,
       dustTokens.address,
       receiver.address,
-      outputTokenContract.address,
       destinationPayload
     );
 
@@ -287,21 +278,10 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 6: Execute SwapAndBridgeTokens
-    const revertOptions = {
-      abortAddress: "0x0000000000000000000000000000000000000000", // not used
-      callOnRevert: false,
-      onRevertGasLimit: 7000000,
-      revertAddress: "0x0000000000000000000000000000000000000000",
-      revertMessage: hre.ethers.utils.hexlify(
-        hre.ethers.utils.toUtf8Bytes("0x")
-      ),
-    };
-
     const tx = await dustTokens.SwapAndBridgeTokens(
       swaps,
       universalApp.address,
       encodedParameters,
-      revertOptions,
       permit.nonce,
       permit.deadline,
       permit.signature
@@ -343,7 +323,6 @@ describe("EvmDustTokens", function () {
       ZETA_ETH_ADDRESS,
       dustTokens.address,
       receiver.address,
-      outputTokenContractAddress,
       destinationPayload
     );
 
@@ -370,21 +349,78 @@ describe("EvmDustTokens", function () {
     const receiverStartBalance = await receiver.getBalance();
 
     // Step 6: Execute SwapAndBridgeTokens
-    const revertOptions = {
-      abortAddress: "0x0000000000000000000000000000000000000000", // not used
-      callOnRevert: false,
-      onRevertGasLimit: 7000000,
-      revertAddress: "0x0000000000000000000000000000000000000000",
-      revertMessage: hre.ethers.utils.hexlify(
-        hre.ethers.utils.toUtf8Bytes("0x")
-      ),
-    };
-
     const tx = await dustTokens.SwapAndBridgeTokens(
       swaps,
       universalApp.address,
       encodedParameters,
-      revertOptions,
+      permit.nonce,
+      permit.deadline,
+      permit.signature
+    );
+    const receipt = await tx.wait();
+
+    // Step 7: Check that the receipt includes the event SwappedAndDeposited
+    const depositEvent = receipt.events?.find(
+      (e) => e.event === "SwappedAndDeposited"
+    );
+
+    expect(tx).not.reverted;
+    expect(depositEvent).exist;
+
+    // Wait for 5 second
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Step 8: Check the receiver's balance for the output token
+    const receiverBalance = await receiver.getBalance();
+
+    expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
+  });
+
+  it.only("Should revert and withdraw native gas token to receiver", async function () {
+    // Step 0: Set unsoported output token
+    const outputTokenContract = "0x25d887Ce7a35172C62FeBFD67a1856F20FaEbB00"; // PEPE token
+
+    // Step 1: Create destination chain payload
+    const destinationPayload = encodeDestinationPayload(
+      receiver.address,
+      outputTokenContract
+    );
+
+    // Step 2: Create Zetachain payload
+    const encodedParameters = encodeZetachainPayload(
+      ZETA_ETH_ADDRESS,
+      dustTokens.address,
+      receiver.address,
+      destinationPayload
+    );
+
+    // Step 3: Create input token swaps
+    const swaps: TokenSwap[] = [
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: DAI.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: LINK.address,
+      },
+      {
+        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
+        token: UNI.address,
+      },
+    ];
+
+    // Step 4: Sign permit
+    const permit = await signPermit(swaps);
+
+    // Step 5: Save the start balance of the receiver
+    const receiverStartBalance = await receiver.getBalance();
+
+    // Step 6: Execute SwapAndBridgeTokens
+    const tx = await dustTokens.SwapAndBridgeTokens(
+      swaps,
+      universalApp.address,
+      encodedParameters,
       permit.nonce,
       permit.deadline,
       permit.signature

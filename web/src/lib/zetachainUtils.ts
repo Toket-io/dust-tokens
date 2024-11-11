@@ -1,9 +1,38 @@
 import { ethers } from "ethers";
 import { SignatureTransfer, PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
+import LocalnetAddresses from "../../../contracts/localnet.json";
 
 export type TokenSwap = {
   amount: ethers.BigNumber;
   token: string;
+};
+
+type AddressData = {
+  chain: string;
+  type: string;
+  address: string;
+};
+type LocalnetData = {
+  pid: number;
+  addresses: AddressData[];
+};
+
+const readLocalnetAddresses = (chain: string, type: string) => {
+  if (!LocalnetAddresses.pid) {
+    throw new Error("Localnet data not found");
+  }
+
+  const addressesData: LocalnetData = LocalnetAddresses;
+
+  const addressData = addressesData.addresses.find(
+    (address) => address.chain === chain && address.type === type
+  );
+
+  if (!addressData) {
+    throw new Error(`Address not found for chain ${chain} and type ${type}`);
+  }
+
+  return addressData.address;
 };
 
 const encodeDestinationPayload = (
@@ -29,16 +58,14 @@ const encodeZetachainPayload = (
   targetChainToken: string,
   targetChainCounterparty: string,
   recipient: string,
-  outputToken: string,
   destinationPayload: string
 ) => {
   const args = {
-    types: ["address", "bytes", "address", "address", "bytes"],
+    types: ["address", "bytes", "bytes", "bytes"],
     values: [
       targetChainToken,
       targetChainCounterparty,
       recipient,
-      outputToken,
       destinationPayload,
     ],
   };
@@ -103,4 +130,9 @@ const calculateEndTime = (duration: number) => {
   return Math.floor((Date.now() + duration) / 1000);
 };
 
-export { encodeDestinationPayload, encodeZetachainPayload, preparePermitData };
+export {
+  readLocalnetAddresses,
+  encodeDestinationPayload,
+  encodeZetachainPayload,
+  preparePermitData,
+};
