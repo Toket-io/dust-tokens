@@ -137,6 +137,33 @@ contract Swap is UniversalContract {
         // Transfer the reverted tokens back to the contract
         IZRC20(targetToken).transfer(address(this), amount);
 
+        uint256 inputForGas;
+        address gasZRC20;
+        uint256 gasFee;
+        uint256 outputAmount;
+
+        (gasZRC20, gasFee) = IZRC20(targetToken).withdrawGasFee();
+
+        if (gasZRC20 == targetToken) {
+            outputAmount = amount - gasFee;
+        } else {
+            inputForGas = SwapHelperLib.swapTokensForExactTokens(
+                systemContract,
+                targetToken,
+                gasFee,
+                gasZRC20,
+                amount
+            );
+            outputAmount = amount - inputForGas;
+        }
+
+        if (gasZRC20 == targetToken) {
+            IZRC20(gasZRC20).approve(address(gateway), outputAmount + gasFee);
+        } else {
+            IZRC20(gasZRC20).approve(address(gateway), gasFee);
+            IZRC20(targetToken).approve(address(gateway), outputAmount);
+        }
+
         // Decode the revert message
         bytes memory recipient = abi.decode(
             revertContext.revertMessage,
@@ -150,15 +177,6 @@ contract Swap is UniversalContract {
             revertMessage: "",
             onRevertGasLimit: 0
         });
-
-        address gasZRC20;
-        uint256 gasFee;
-
-        (gasZRC20, gasFee) = IZRC20(targetToken).withdrawGasFee();
-
-        uint256 outputAmount = amount - gasFee;
-
-        IZRC20(gasZRC20).approve(address(gateway), outputAmount + gasFee);
 
         // Withdraw the tokens to the original recipient
         gateway.withdraw(recipient, outputAmount, targetToken, revertOptions);
