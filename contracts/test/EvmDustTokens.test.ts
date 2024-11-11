@@ -98,9 +98,7 @@ describe("EvmDustTokens", function () {
     // Save Signer
     let signers = await hre.ethers.getSigners();
     signer = signers[0];
-
     receiver = signers[2];
-
     notOwner = signers[3];
 
     console.log("Signer Address:", signer.address);
@@ -111,7 +109,6 @@ describe("EvmDustTokens", function () {
     const simpleSwapFactory = await hre.ethers.getContractFactory("SimpleSwap");
     simpleSwap = await simpleSwapFactory.deploy(UNISWAP_ROUTER, WETH_ADDRESS);
     await simpleSwap.deployed();
-    console.log("SimpleSwap deployed to:", simpleSwap.address);
 
     // Deploy the DustTokens contract
     const evmDustTokensFactory = await hre.ethers.getContractFactory(
@@ -125,7 +122,7 @@ describe("EvmDustTokens", function () {
       PERMIT2_ADDRESS
     );
     await dustTokens.deployed();
-    console.log("DustTokens deployed to:", dustTokens.address);
+    console.log("EvmDustTokens deployed to:", dustTokens.address);
 
     // Configure initial whitelisted tokens
     await dustTokens.addToken(DAI_ADDRESS);
@@ -165,6 +162,7 @@ describe("EvmDustTokens", function () {
     await LINK.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
     await UNI.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
     await WBTC.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
+    console.log("Permit2 contract approved to spend tokens");
   });
 
   this.beforeEach(async function () {
@@ -376,7 +374,7 @@ describe("EvmDustTokens", function () {
     expect(receiverBalance).to.be.greaterThan(receiverStartBalance);
   });
 
-  it.only("Should revert and withdraw native gas token to receiver", async function () {
+  it("Should revert on destination chain and withdraw native gas token to receiver", async function () {
     // Step 0: Set unsoported output token
     const outputTokenContract = "0x25d887Ce7a35172C62FeBFD67a1856F20FaEbB00"; // PEPE token
 
