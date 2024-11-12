@@ -15,10 +15,9 @@ export const config = getDefaultConfig({
   appName: "RainbowKit demo",
   projectId: "YOUR_PROJECT_ID",
   chains: [
-    sepolia,
-    bscTestnet,
-    zetachainAthensTestnet,
+    // sepolia,
+    // bscTestnet,
+    // zetachainAthensTestnet,
     hardhat,
-    customLocalHost,
   ],
 });
