@@ -51,8 +51,8 @@ export function SwapPreviewDrawer({
 
   useEffect(() => {
     const initializeProvider = async () => {
-      calculateOutputTokenAmount();
       if (open) {
+        calculateOutputTokenAmount();
         validatePermit2();
       }
     };
@@ -85,7 +85,7 @@ export function SwapPreviewDrawer({
     );
 
     const result = await contractInstance.hasPermit2Allowance(
-      signer.address,
+      await signer.getAddress(),
       token.address,
       ethers.utils.parseUnits(token.amount, token.decimals)
     );

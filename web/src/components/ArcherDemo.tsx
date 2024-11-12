@@ -30,6 +30,7 @@ import {
   encodeDestinationPayload,
   encodeZetachainPayload,
   preparePermitData,
+  readLocalnetAddresses,
   TokenSwap,
 } from "@/lib/zetachainUtils";
 
@@ -70,7 +71,7 @@ const networks: Network[] = [
     enabled: true,
     rpc: "http://localhost:8545",
     contractAddress: ContractsConfig.evmDapp,
-    zrc20Address: ContractsConfig.zeta_ethEthToken,
+    zrc20Address: readLocalnetAddresses("zetachain", "ZRC-20 ETH on 5"),
     nativeToken: {
       name: "Ether (Native)",
       symbol: "ETH",
@@ -85,7 +86,7 @@ const networks: Network[] = [
     enabled: false,
     rpc: "",
     contractAddress: ContractsConfig.evmDapp,
-    zrc20Address: ContractsConfig.zeta_ethEthToken,
+    zrc20Address: readLocalnetAddresses("zetachain", "ZRC-20 ETH on 5"),
     nativeToken: {
       name: "Ether (Native)",
       symbol: "ETH",
@@ -100,7 +101,7 @@ export const CONTRACT_ABI = [
   "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
   "function hasPermit2Allowance(address user, address token, uint256 requiredAmount) view returns (bool)",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
-  "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions, uint256 nonce, uint256 deadline, bytes signature) public",
+  "function SwapAndBridgeTokens((address token, uint256 amount, uint256 minAmountOut)[], address universalApp, bytes payload, uint256 nonce, uint256 deadline, bytes signature) public",
   "function signatureBatchTransfer((address token, uint256 amount)[], uint256 nonce, uint256 deadline, bytes signature)",
   "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
   "event SwappedAndWithdrawn(address indexed receiver, address outputToken, uint256 totalTokensReceived)",
@@ -216,7 +217,7 @@ export default function Component() {
 
       setLoading(true);
       const [addresses, names, symbols, decimals, tokenBalances] =
-        await contractInstance.getBalances(signer.address);
+        await contractInstance.getBalances(await signer.getAddress());
       const formattedBalances: Token[] = addresses.map((address, index) => ({
         address,
         name: names[index],
@@ -252,7 +253,7 @@ export default function Component() {
       );
 
       const [addresses, names, symbols, decimals, tokenBalances] =
-        await contractInstance.getBalances(signer.address);
+        await contractInstance.getBalances(await signer.getAddress());
       const formattedBalances: Token[] = addresses.map((address, index) => ({
         address,
         name: names[index],
@@ -290,10 +291,12 @@ export default function Component() {
   const handleSwapAndBridge = async () => {
     try {
       // Validation checks
+      const recipient = await signer.getAddress();
+
       if (
         !ContractsConfig.zeta_universalDapp ||
         !signer ||
-        !signer.address ||
+        !recipient ||
         !selectedNetwork ||
         !selectedOutputToken
       ) {
@@ -303,7 +306,6 @@ export default function Component() {
       }
 
       // Step 1: Prepare payloads
-      const recipient = signer.address;
       const outputToken = selectedOutputToken.address;
       const destinationPayload = encodeDestinationPayload(
         recipient,
@@ -315,13 +317,6 @@ export default function Component() {
         recipient,
         destinationPayload
       );
-      const revertOptions = {
-        abortAddress: "0x0000000000000000000000000000000000000000",
-        callOnRevert: false,
-        onRevertGasLimit: 7000000,
-        revertAddress: "0x0000000000000000000000000000000000000000",
-        revertMessage: ethers.utils.hexlify(ethers.utils.toUtf8Bytes("0x")),
-      };
       const tokenSwaps: TokenSwap[] = selectedTokens.map(
         ({ amount, decimals, address }) => ({
           amount: ethers.utils.parseUnits(amount, decimals),
@@ -346,13 +341,12 @@ export default function Component() {
         tokenSwaps,
         ContractsConfig.zeta_universalDapp,
         encodedParameters,
-        revertOptions,
         permit.nonce,
         permit.deadline,
         permit.signature
       );
 
-      const receipt = tx.wait();
+      const receipt = await tx.wait();
 
       console.log("Transaction submitted:", tx.hash, receipt);
 
@@ -362,7 +356,7 @@ export default function Component() {
       contractInstance.on(
         "SwappedAndDeposited",
         (executor, swaps, totalTokensReceived) => {
-          if (executor.toLowerCase() === signer.address.toLowerCase()) {
+          if (executor.toLowerCase() === recipient.toLowerCase()) {
             // Filter based on signer
 
             setTransactionStatus("destinationPending");
@@ -385,7 +379,7 @@ export default function Component() {
       );
 
       const onSwappedAndWithdrawn = (executor, outputToken, outputAmount) => {
-        if (executor.toLowerCase() === signer.address.toLowerCase()) {
+        if (executor.toLowerCase() === recipient.toLowerCase()) {
           // Filter based on signer
           console.log("SwappedAndWithdrawn event detected for signer!");
           const formattedAmount = ethers.utils.formatUnits(
