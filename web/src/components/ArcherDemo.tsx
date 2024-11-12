@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { Check, ChevronsUpDown, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,13 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 import { ethers } from "ethers";
 import { provider, signer } from "@/app/page";
@@ -45,6 +51,7 @@ export interface Token {
 export type SelectedToken = Token & {
   amount: string;
   isMax: boolean;
+  hasPermit2Allowance: boolean;
 };
 
 export type Network = {
@@ -149,7 +156,7 @@ export default function Component() {
     ) {
       setSelectedTokens([
         ...selectedTokens,
-        { ...token, amount: "", isMax: false },
+        { ...token, amount: "", isMax: false, hasPermit2Allowance: true },
       ]);
     } else {
       setSelectedTokens(
