@@ -14,8 +14,6 @@ import {
 } from "../../web/src/lib/zetachainUtils";
 import { EvmDustTokens, SimpleSwap, Swap } from "../typechain-types";
 
-const DAI_DECIMALS = 18;
-
 // Zetachain Contracts
 const ZETA_GATEWAY_ADDRESS: string = readLocalnetAddresses(
   "zetachain",
@@ -24,10 +22,6 @@ const ZETA_GATEWAY_ADDRESS: string = readLocalnetAddresses(
 const ZETA_SYSTEM_CONTRACT_ADDRESS: string = readLocalnetAddresses(
   "zetachain",
   "systemContract"
-);
-const ZETA_USDC_ETH_ADDRESS: string = readLocalnetAddresses(
-  "zetachain",
-  "ZRC-20 USDC on 5"
 );
 const ZETA_ETH_ADDRESS: string = readLocalnetAddresses(
   "zetachain",
@@ -52,19 +46,6 @@ const UNI_ADDRESS = readLocalnetAddresses("ethereum", "uni");
 const LINK_ADDRESS: string = readLocalnetAddresses("ethereum", "link");
 const WBTC_ADDRESS: string = readLocalnetAddresses("ethereum", "wbtc");
 
-const ercAbi = [
-  // Read-Only Functions
-  "function symbol() view returns (string)",
-  "function name() view returns (string)",
-  "function decimals() view returns (uint8)",
-  "function balanceOf(address owner) view returns (uint256)",
-  // Authenticated Functions
-  "function transfer(address to, uint amount) returns (bool)",
-  "function deposit() public payable",
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function withdraw(uint256 wad) external",
-];
-
 describe("EvmDustTokens", function () {
   let signer: SignerWithAddress;
   let receiver: SignerWithAddress;
@@ -82,8 +63,6 @@ describe("EvmDustTokens", function () {
 
   // ZetaChain side Contracts
   let universalApp: Swap;
-  let ZETA_USDC_ETH: Contract;
-  let ZETA_ETH: Contract;
 
   // MARK: Helper Functions
   const signPermit = async (swaps: TokenSwap[]) => {
@@ -102,9 +81,11 @@ describe("EvmDustTokens", function () {
     swapAmount: string = "1",
     slippageBPS: number = 50
   ): Promise<TokenSwap[]> => {
-    const amount = hre.ethers.utils.parseUnits(swapAmount, DAI_DECIMALS);
-
     const swapPromises: Promise<TokenSwap>[] = tokens.map(async (token) => {
+      const amount = hre.ethers.utils.parseUnits(
+        swapAmount,
+        await token.decimals()
+      );
       const minAmountOut = await getUniswapV3EstimatedAmountOut(
         hre.ethers.provider,
         UNISWAP_QUOTER,
@@ -180,14 +161,6 @@ describe("EvmDustTokens", function () {
     );
     await universalApp.deployed();
     console.log("Universal App deployed to:", universalApp.address);
-
-    // Connect to ERC20s
-    ZETA_USDC_ETH = new hre.ethers.Contract(
-      ZETA_USDC_ETH_ADDRESS,
-      ercAbi,
-      signer
-    );
-    ZETA_ETH = new hre.ethers.Contract(ZETA_ETH_ADDRESS, ercAbi, signer);
 
     // Approve permit2 contract
     await WETH.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
@@ -599,3 +572,16 @@ describe("EvmDustTokens", function () {
     }
   });
 });
+
+const ercAbi = [
+  // Read-Only Functions
+  "function symbol() view returns (string)",
+  "function name() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function balanceOf(address owner) view returns (uint256)",
+  // Authenticated Functions
+  "function transfer(address to, uint amount) returns (bool)",
+  "function deposit() public payable",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function withdraw(uint256 wad) external",
+];

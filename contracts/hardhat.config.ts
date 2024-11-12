@@ -1,5 +1,4 @@
 import "./tasks/deploy";
-import "./tasks/debugEvent";
 import "@zetachain/localnet/tasks";
 import "@nomicfoundation/hardhat-toolbox";
 import "@zetachain/toolkit/tasks";
