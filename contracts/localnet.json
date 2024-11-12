@@ -1,0 +1,95 @@
+{
+  "pid": 74177,
+  "addresses": [
+    {
+      "chain": "zetachain",
+      "type": "gatewayZEVM",
+      "address": "0x5DE9Ff054084071ca111f35180Cb44c2e413be92"
+    },
+    {
+      "chain": "zetachain",
+      "type": "systemContract",
+      "address": "0x263a5ad450bD51cea3c818ba87c80608Cb283508"
+    },
+    {
+      "chain": "zetachain",
+      "type": "wzeta",
+      "address": "0x4fd715125CD4E604A89130a8d573db91B086CB60"
+    },
+    {
+      "chain": "zetachain",
+      "type": "uniswapFactoryInstance",
+      "address": "0x58F5a2711c7464B950361529ca81713B35D487b1"
+    },
+    {
+      "chain": "zetachain",
+      "type": "uniswapRouterInstance",
+      "address": "0xDeb76598eDce92ae77F2D4f88542ED2C91b8De82"
+    },
+    {
+      "chain": "zetachain",
+      "type": "ZRC-20 ETH on 5",
+      "address": "0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe"
+    },
+    {
+      "chain": "zetachain",
+      "type": "ZRC-20 USDC on 5",
+      "address": "0xd97B1de3619ed2c6BEb3860147E30cA8A7dC9891"
+    },
+    {
+      "chain": "zetachain",
+      "type": "ZRC-20 BNB on 97",
+      "address": "0x65a45c57636f9BcCeD4fe193A602008578BcA90b"
+    },
+    {
+      "chain": "zetachain",
+      "type": "ZRC-20 USDC on 97",
+      "address": "0x05BA149A7bd6dC1F937fA9046A9e05C05f3b18b0"
+    },
+    {
+      "chain": "zetachain",
+      "type": "tss",
+      "address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    },
+    {
+      "chain": "ethereum",
+      "type": "zetaConnector",
+      "address": "0xD9d684546ED4c727B136503016E137822DD9b4D7"
+    },
+    {
+      "chain": "ethereum",
+      "type": "gatewayEVM",
+      "address": "0xBdd3AEAE360384410BFB65529B113bf13712cA2F"
+    },
+    {
+      "chain": "ethereum",
+      "type": "custody",
+      "address": "0x79b3f34855c3478Fa45f65344a3f5E3c7b94405c"
+    },
+    {
+      "chain": "ethereum",
+      "type": "testEVMZeta",
+      "address": "0x866bF431d7043c9A0AD8E9259ca291EeB2305a8a"
+    },
+    {
+      "chain": "bnb",
+      "type": "zetaConnector",
+      "address": "0xD516492bb58F07bc91c972DCCB2DF654653d4D33"
+    },
+    {
+      "chain": "bnb",
+      "type": "gatewayEVM",
+      "address": "0x12604a5B388a1E1834693bfe94dDdF81A60B56A2"
+    },
+    {
+      "chain": "bnb",
+      "type": "custody",
+      "address": "0xd23BF69104cC640E68ebeE83B9833d6Db6F220E6"
+    },
+    {
+      "chain": "bnb",
+      "type": "testEVMZeta",
+      "address": "0x9A213F53334279C128C37DA962E5472eCD90554f"
+    }
+  ]
+}
