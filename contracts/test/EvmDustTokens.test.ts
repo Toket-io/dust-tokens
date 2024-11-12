@@ -8,6 +8,7 @@ import ContractsConfig from "../../ContractsConfig";
 import {
   encodeDestinationPayload,
   encodeZetachainPayload,
+  getUniswapV3EstimatedAmountOut,
   preparePermitData,
   readLocalnetAddresses,
   TokenSwap,
@@ -46,6 +47,7 @@ const LINK_ADDRESS: string = process.env.LINK_ADDRESS ?? "";
 const WBTC_ADDRESS: string = process.env.WBTC_ADDRESS ?? "";
 
 const UNISWAP_ROUTER: string = ContractsConfig.evm_uniswapRouterV3;
+const UNISWAP_QUOTER: string = ContractsConfig.evm_uniswapQuoterV3;
 
 const ercAbi = [
   // Read-Only Functions
@@ -90,6 +92,36 @@ describe("EvmDustTokens", function () {
     const signature = await signer._signTypedData(domain, types, values);
 
     return { deadline, nonce, signature };
+  };
+
+  const getTokenSwaps = async (
+    tokens: Contract[] = [DAI, LINK, UNI],
+    swapAmount: string = "1",
+    slippageBPS: number = 50
+  ): Promise<TokenSwap[]> => {
+    const amount = hre.ethers.utils.parseUnits(swapAmount, DAI_DECIMALS);
+
+    const swapPromises: Promise<TokenSwap>[] = tokens.map(async (token) => {
+      const minAmountOut = await getUniswapV3EstimatedAmountOut(
+        hre.ethers.provider,
+        UNISWAP_QUOTER,
+        token.address,
+        WETH.address,
+        amount,
+        slippageBPS
+      );
+
+      return {
+        amount,
+        minAmountOut,
+        token: token.address,
+      };
+    });
+
+    // Await all Promises to resolve
+    const swaps: TokenSwap[] = await Promise.all(swapPromises);
+
+    return swaps;
   };
 
   // MARK: Setup
@@ -212,20 +244,7 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 3: Create input token swaps
-    const swaps: TokenSwap[] = [
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: DAI.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: LINK.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: UNI.address,
-      },
-    ];
+    const swaps: TokenSwap[] = await getTokenSwaps();
 
     // Step 4: Sign permit
     const permit = await signPermit(swaps);
@@ -285,20 +304,7 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 3: Create input token swaps
-    const swaps: TokenSwap[] = [
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: DAI.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: LINK.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: UNI.address,
-      },
-    ];
+    const swaps: TokenSwap[] = await getTokenSwaps();
 
     // Step 4: Sign permit
     const permit = await signPermit(swaps);
@@ -353,20 +359,7 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 3: Create input token swaps
-    const swaps: TokenSwap[] = [
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: DAI.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: LINK.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: UNI.address,
-      },
-    ];
+    const swaps: TokenSwap[] = await getTokenSwaps();
 
     // Step 4: Sign permit
     const permit = await signPermit(swaps);
@@ -421,20 +414,7 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 3: Create input token swaps
-    const swaps: TokenSwap[] = [
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: DAI.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: LINK.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: UNI.address,
-      },
-    ];
+    const swaps: TokenSwap[] = await getTokenSwaps();
 
     // Step 4: Sign permit
     const permit = await signPermit(swaps);
@@ -581,16 +561,7 @@ describe("EvmDustTokens", function () {
   it("Should deposit multiple tokens with Permit2 batch signature transfer", async function () {
     try {
       const tokens = [DAI, UNI];
-      const swaps: TokenSwap[] = [
-        {
-          amount: hre.ethers.utils.parseUnits("100", 18),
-          token: tokens[0].address,
-        },
-        {
-          amount: hre.ethers.utils.parseUnits("200", 18),
-          token: tokens[1].address,
-        },
-      ];
+      const swaps: TokenSwap[] = await getTokenSwaps([DAI, UNI], "100");
 
       const permit = await signPermit(swaps);
 
