@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,12 +17,14 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer";
 import { ArrowDown, Coins } from "lucide-react";
-import { Network, SelectedToken, Token } from "./ArcherDemo";
+import { CONTRACT_ABI, Network, SelectedToken, Token } from "./ArcherDemo";
 import { toast } from "sonner";
 import { ethers } from "ethers";
 import { provider, signer } from "@/app/page";
 import ContractsConfig from "../../../ContractsConfig";
 import { getUniswapV3EstimatedAmountOut } from "@/lib/zetachainUtils";
+import { Badge } from "./ui/badge";
+import { PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 
 type ProfileFormDrawerProps = {
   selectedTokens: SelectedToken[];
@@ -43,26 +45,72 @@ export function SwapPreviewDrawer({
   const [saving, setSaving] = React.useState(false);
   const [amountOut, setAmountOut] = React.useState<string | null>(null);
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const [permit2Status, setPermit2Status] = useState<{
+    [key: string]: boolean;
+  }>({});
 
   useEffect(() => {
     const initializeProvider = async () => {
       calculateOutputTokenAmount();
+      if (open) {
+        validatePermit2();
+      }
     };
 
     initializeProvider();
   }, [open, selectedTokens, selectedNetwork, selectedOutputToken]);
 
-  const handleConfirm = async () => {
-    setSaving(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+  const validatePermit2 = async () => {
+    const newStatus: { [key: string]: boolean } = {};
+    for (const token of selectedTokens) {
+      try {
+        // Replace this with your actual Permit2 validation logic
+        const isEnabled = await checkPermit2Enabled(token);
+        newStatus[token.address] = isEnabled;
+      } catch (error) {
+        console.error(`Error validating Permit2 for ${token.symbol}:`, error);
+        newStatus[token.address] = false;
+      }
+    }
+    setPermit2Status(newStatus);
+  };
 
-      setOpen(false);
-      onConfirm(selectedTokens);
+  const checkPermit2Enabled = async (
+    token: SelectedToken
+  ): Promise<boolean> => {
+    const contractInstance = new ethers.Contract(
+      ContractsConfig.evmDapp,
+      CONTRACT_ABI,
+      signer
+    );
+
+    const result = await contractInstance.hasPermit2Allowance(
+      signer.address,
+      token.address,
+      ethers.utils.parseUnits(token.amount, token.decimals)
+    );
+
+    return result;
+  };
+
+  const enablePermit2 = async (tokenAddress: string) => {
+    try {
+      const ercAbi = [
+        "function approve(address spender, uint256 amount) returns (bool)",
+      ];
+
+      const tokenContract = new ethers.Contract(tokenAddress, ercAbi, signer);
+      const tx = await tokenContract.approve(
+        PERMIT2_ADDRESS,
+        ethers.constants.MaxUint256
+      );
+      await tx.wait();
+
+      setPermit2Status((prev) => ({ ...prev, [tokenAddress]: true }));
+      toast.success(`Permit2 enabled for ${tokenAddress}`);
     } catch (error) {
-      toast.error("Something went wrong. Please try again later.");
-    } finally {
-      setSaving(false);
+      console.error(`Error enabling Permit2 for ${tokenAddress}:`, error);
+      toast.error(`Failed to enable Permit2 for ${tokenAddress}`);
     }
   };
 
@@ -205,6 +253,20 @@ export function SwapPreviewDrawer({
     }
   }
 
+  const handleConfirm = async () => {
+    setSaving(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      setOpen(false);
+      onConfirm(selectedTokens);
+    } catch (error) {
+      toast.error("Something went wrong. Please try again later.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
@@ -223,11 +285,28 @@ export function SwapPreviewDrawer({
           <div className="space-y-4">
             <div className="font-semibold">Input Tokens:</div>
             {selectedTokens.map((token, index) => (
-              <div key={index} className="flex justify-between items-center">
-                <span>
-                  {token.name} {`(${token.symbol})`}
-                </span>
-                <span>{token.amount}</span>
+              <div key={index}>
+                <div className="flex justify-between items-center">
+                  <span>
+                    {token.name} {`(${token.symbol})`}
+                  </span>
+                  <span>{token.amount}</span>
+                </div>
+
+                {permit2Status[token.address] === false && (
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-red-500 mr-2 text-xs">
+                      Permit2 not enabled for {token.symbol}
+                    </span>
+                    <Badge
+                      className="cursor-pointer"
+                      variant="destructive"
+                      onClick={() => enablePermit2(token.address)}
+                    >
+                      Enable
+                    </Badge>
+                  </div>
+                )}
               </div>
             ))}
             <div className="flex justify-center my-2">
@@ -236,7 +315,6 @@ export function SwapPreviewDrawer({
             <div className="font-semibold">Output Network & Token:</div>
             <div className="flex justify-between items-center">
               <span>{`${selectedOutputToken?.name} @ ${selectedNetwork?.label}`}</span>
-
               <span>
                 {amountOut
                   ? `${amountOut} ${selectedOutputToken?.symbol}`
@@ -247,7 +325,11 @@ export function SwapPreviewDrawer({
           <DialogFooter className="flex flex-column mt-4">
             <Button
               variant="default"
-              disabled={disabled || !amountOut}
+              disabled={
+                disabled ||
+                !amountOut ||
+                Object.values(permit2Status).some((status) => status === false)
+              }
               loading={saving}
               size="full"
               onClick={handleConfirm}

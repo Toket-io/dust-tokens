@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
-import { Check, ChevronsUpDown, Coins, RotateCcw, X } from "lucide-react";
+import { Check, ChevronsUpDown, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ArcherContainer, ArcherElement } from "react-archer";
 import {
@@ -19,19 +19,12 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 import { ethers } from "ethers";
 import { provider, signer } from "@/app/page";
 import ContractsConfig from "../../../ContractsConfig";
 import { toast } from "sonner";
-import { SignatureTransfer, PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import TransactionStatus from "./TransactionStatus";
 import {
   encodeDestinationPayload,
@@ -51,7 +44,6 @@ export interface Token {
 export type SelectedToken = Token & {
   amount: string;
   isMax: boolean;
-  hasPermit2Allowance: boolean;
 };
 
 export type Network = {
@@ -104,7 +96,7 @@ const networks: Network[] = [
   },
 ];
 
-const CONTRACT_ABI = [
+export const CONTRACT_ABI = [
   "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
   "function hasPermit2Allowance(address user, address token, uint256 requiredAmount) view returns (bool)",
   "function getTokens() view returns (address[], string[], string[], uint8[])",
@@ -156,7 +148,7 @@ export default function Component() {
     ) {
       setSelectedTokens([
         ...selectedTokens,
-        { ...token, amount: "", isMax: false, hasPermit2Allowance: true },
+        { ...token, amount: "", isMax: false },
       ]);
     } else {
       setSelectedTokens(
@@ -180,43 +172,8 @@ export default function Component() {
     setOpenNetwork(false);
   };
 
-  const handleApprovePermit2 = async (token: Token) => {
-    const ercAbi = [
-      "function approve(address spender, uint256 amount) returns (bool)",
-    ];
-
-    const tokenContract = new ethers.Contract(token.address, ercAbi, signer);
-    const tx = await tokenContract.approve(
-      PERMIT2_ADDRESS,
-      ethers.constants.MaxUint256
-    );
-    await tx.wait();
-
-    console.log("Approved token");
-  };
-
   const handleAmountChange = async (tokenValue: string, amount: string) => {
     // TODO: Check that amount is a valid number and within the token's balance
-
-    const contractInstance = new ethers.Contract(
-      ContractsConfig.evmDapp,
-      CONTRACT_ABI,
-      signer
-    );
-
-    const selectedToken = selectedTokens.find(
-      (token) => token.symbol === tokenValue
-    );
-
-    let hasPermit2Allowance = true;
-    if (selectedToken && amount !== "") {
-      console.log("CHECKING PERMIT2 ALLOWANCE: ", selectedToken);
-      await contractInstance.hasPermit2Allowance(
-        signer.address,
-        selectedToken.address,
-        ethers.utils.parseUnits(amount, selectedToken.decimals)
-      );
-    }
 
     setSelectedTokens(
       selectedTokens.map((token) =>
@@ -225,7 +182,6 @@ export default function Component() {
               ...token,
               amount,
               isMax: false,
-              hasPermit2Allowance,
             }
           : token
       )
