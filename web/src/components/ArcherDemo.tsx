@@ -321,7 +321,7 @@ export default function Component() {
         ({ amount, decimals, address }) => ({
           amount: ethers.utils.parseUnits(amount, decimals),
           token: address,
-          minAmountOut: ethers.constants.Zero,
+          minAmountOut: ethers.constants.Zero, // TODO: Set a minimum amount out
         })
       );
 
