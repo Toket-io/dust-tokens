@@ -37,6 +37,7 @@ import {
   encodeDestinationPayload,
   encodeZetachainPayload,
   preparePermitData,
+  TokenSwap,
 } from "@/lib/zetachainUtils";
 
 export interface Token {
@@ -356,7 +357,6 @@ export default function Component() {
         selectedNetwork.zrc20Address,
         selectedNetwork.contractAddress,
         recipient,
-        outputToken,
         destinationPayload
       );
       const revertOptions = {
@@ -366,10 +366,11 @@ export default function Component() {
         revertAddress: "0x0000000000000000000000000000000000000000",
         revertMessage: ethers.utils.hexlify(ethers.utils.toUtf8Bytes("0x")),
       };
-      const tokenSwaps = selectedTokens.map(
+      const tokenSwaps: TokenSwap[] = selectedTokens.map(
         ({ amount, decimals, address }) => ({
           amount: ethers.utils.parseUnits(amount, decimals),
           token: address,
+          minAmountOut: ethers.constants.Zero,
         })
       );
 

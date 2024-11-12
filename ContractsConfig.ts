@@ -1,6 +1,7 @@
 interface ZetachainContracts {
   // EVM Side
   evm_uniswapRouterV3: `0x${string}`;
+  evm_uniswapQuoterV3: `0x${string}`;
   evmDapp: `0x${string}`;
 
   // ZetaChain Side
@@ -14,6 +15,7 @@ interface ZetachainContracts {
 const defaultLocalnetConfig: ZetachainContracts = {
   // EVM Side
   evm_uniswapRouterV3: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+  evm_uniswapQuoterV3: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6",
   evmDapp: "0x",
 
   // ZetaChain Side
@@ -27,6 +29,7 @@ const defaultLocalnetConfig: ZetachainContracts = {
 const arbitrumForkedLocalnetConfig: ZetachainContracts = {
   // EVM Side
   evm_uniswapRouterV3: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+  evm_uniswapQuoterV3: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6",
   evmDapp: "0x536ADf9f074159B303001DF782ceeCF8e8f92dC5",
 
   // ZetaChain Side

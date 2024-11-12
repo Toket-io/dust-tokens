@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { ethers } from "ethers";
 import { provider, signer } from "@/app/page";
 import ContractsConfig from "../../../ContractsConfig";
+import { getUniswapV3EstimatedAmountOut } from "@/lib/zetachainUtils";
 
 type ProfileFormDrawerProps = {
   selectedTokens: SelectedToken[];
@@ -82,6 +83,7 @@ export function SwapPreviewDrawer({
     }
     setAmountOut(null);
 
+    const slippageBPS = 50;
     try {
       let transportTokenAmount = ethers.BigNumber.from(0);
 
@@ -91,25 +93,33 @@ export function SwapPreviewDrawer({
           token.decimals
         );
         const swapTokenAmount = await getUniswapV3EstimatedAmountOut(
+          provider,
+          ContractsConfig.evm_uniswapQuoterV3,
           token.address,
           ContractsConfig.evm_weth!,
-          parsedAmount
+          parsedAmount,
+          slippageBPS
         );
 
         transportTokenAmount = transportTokenAmount.add(swapTokenAmount);
       }
 
       const outputTokenAmount = await getUniswapV3EstimatedAmountOut(
+        provider,
+        ContractsConfig.evm_uniswapQuoterV3,
         ContractsConfig.evm_weth!,
         selectedOutputToken.address,
-        transportTokenAmount
+        transportTokenAmount,
+        slippageBPS
       );
 
       // const zetachainExchangeRate = await getUniswapV2AmountOut(
-      //   ContractsConfig.zeta_usdcEthToken,
-      //   ContractsConfig.zeta_ethEthToken,
-      //   parsedAmount
+      //   "0x2ca7d64A7EFE2D62A725E2B35Cf7230D6677FfEe",
+      //   "0x65a45c57636f9BcCeD4fe193A602008578BcA90b",
+      //   transportTokenAmount
       // );
+
+      // console.log("ZETA EXCHANGE RATE:", zetachainExchangeRate);
 
       // console.log("ZETA EXCHANGE RATE:", zetachainExchangeRate);
 
@@ -131,71 +141,69 @@ export function SwapPreviewDrawer({
     }
   };
 
-  async function getUniswapV3EstimatedAmountOut(
+  async function getUniswapV2AmountOut(
     tokenIn: string,
     tokenOut: string,
     amountIn: ethers.BigNumber
   ) {
-    const quoterAddress = "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6"; // Uniswap V3 Quoter address
-    const quoterAbi = [
-      "function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)",
+    const uniswapV2FactoryAddress = ContractsConfig.zeta_uniswapFactoryV2;
+    const uniswapV2FactoryAbi = [
+      "function getPair(address tokenA, address tokenB) external view returns (address pair)",
     ];
-
-    // Initialize the Quoter contract
-    const quoterContract = new ethers.Contract(
-      quoterAddress,
-      quoterAbi,
+    const uniswapV2Factory = new ethers.Contract(
+      uniswapV2FactoryAddress,
+      uniswapV2FactoryAbi,
       provider
     );
+    const uniswapV2PairAbi = [
+      "function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+      "function token0() external view returns (address)",
+      "function token1() external view returns (address)",
+    ];
     try {
-      const amountOut: ethers.BigNumber =
-        await quoterContract.callStatic.quoteExactInputSingle(
-          tokenIn,
-          tokenOut,
-          3000,
-          amountIn,
-          0 // sqrtPriceLimitX96, set to 0 for no limit
-        );
+      // Step 1: Get the pair address
+      const pairAddress = await uniswapV2Factory.getPair(tokenIn, tokenOut);
+      if (pairAddress === ethers.constants.AddressZero) {
+        throw new Error("Pair does not exist.");
+      }
+
+      // Step 2: Create a contract instance for the pair
+      const pairContract = new ethers.Contract(
+        pairAddress,
+        uniswapV2PairAbi,
+        provider
+      );
+
+      // Step 3: Get reserves and token order
+      const [reserve0, reserve1] = await pairContract.getReserves();
+      const token0 = await pairContract.token0();
+      const token1 = await pairContract.token1();
+
+      // Step 4: Determine the correct reserve ordering
+      let reserveIn, reserveOut;
+      if (tokenIn.toLowerCase() === token0.toLowerCase()) {
+        reserveIn = reserve0;
+        reserveOut = reserve1;
+      } else if (tokenIn.toLowerCase() === token1.toLowerCase()) {
+        reserveIn = reserve1;
+        reserveOut = reserve0;
+      } else {
+        throw new Error("Invalid token addresses.");
+      }
+
+      // Step 5: Apply the Uniswap V2 formula to get the amount out
+      // Uniswap V2 formula: amountOut = (amountIn * 997 * reserveOut) / (reserveIn * 1000 + amountIn * 997)
+      const amountInWithFee = amountIn.mul(997);
+      const numerator = amountInWithFee.mul(reserveOut);
+      const denominator = reserveIn.mul(1000).add(amountInWithFee);
+      const amountOut = numerator.div(denominator);
+
       return amountOut;
     } catch (error) {
       console.error("Error getting estimated amount out:", error);
       throw error;
     }
   }
-
-  // async function getUniswapV2AmountOut(
-  //   tokenIn: string,
-  //   tokenOut: string,
-  //   amountIn: ethers.BigNumber
-  // ) {
-  //   // Ensure amountInRaw is a string representing the amount (e.g., '1.0')
-
-  //   const UNIVERSAL_APP_ABI = [
-  //     "function getMinOutAmount(address tokenIn, address tokenOut, uint256 amountIn) external view returns (uint256 minOutAmount)",
-  //   ];
-
-  //   try {
-  //     const contract = new ethers.Contract(
-  //       ContractsConfig.zeta_universalDapp,
-  //       UNIVERSAL_APP_ABI,
-  //       provider
-  //     );
-  //     // Call the contract function
-  //     const minOutAmount = await contract.getMinOutAmount(
-  //       tokenIn,
-  //       tokenOut,
-  //       amountIn
-  //     );
-
-  //     // Format the output amount with tokenOut decimals
-  //     const minOutAmountFormatted = ethers.utils.formatUnits(minOutAmount, 18);
-
-  //     return minOutAmountFormatted;
-  //   } catch (error) {
-  //     console.error("Error fetching minOutAmount:", error);
-  //     throw error;
-  //   }
-  // }
 
   if (isDesktop) {
     return (

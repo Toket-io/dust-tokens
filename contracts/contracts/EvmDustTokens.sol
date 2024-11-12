@@ -38,6 +38,7 @@ interface IERC20Metadata is IERC20 {
 struct SwapInput {
     address token;
     uint256 amount;
+    uint256 minAmountOut;
 }
 
 struct SwapOutput {
@@ -130,7 +131,7 @@ contract EvmDustTokens is Ownable {
                     recipient: address(this),
                     deadline: block.timestamp,
                     amountIn: amount,
-                    amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
+                    amountOutMinimum: swap.minAmountOut,
                     sqrtPriceLimitX96: 0
                 });
 

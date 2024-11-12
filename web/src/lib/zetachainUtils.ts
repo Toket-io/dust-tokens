@@ -5,6 +5,7 @@ import LocalnetAddresses from "../../../contracts/localnet.json";
 export type TokenSwap = {
   amount: ethers.BigNumber;
   token: string;
+  minAmountOut: ethers.BigNumber;
 };
 
 type AddressData = {
@@ -130,9 +131,47 @@ const calculateEndTime = (duration: number) => {
   return Math.floor((Date.now() + duration) / 1000);
 };
 
+async function getUniswapV3EstimatedAmountOut(
+  provider: ethers.providers.BaseProvider,
+  quoterAddress: string, // Uniswap V3 Quoter address
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: ethers.BigNumber,
+  slippageBPS: number
+) {
+  const quoterAbi = [
+    "function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)",
+  ];
+
+  // Initialize the Quoter contract
+  const quoterContract = new ethers.Contract(
+    quoterAddress,
+    quoterAbi,
+    provider
+  );
+  try {
+    const amountOut: ethers.BigNumber =
+      await quoterContract.callStatic.quoteExactInputSingle(
+        tokenIn,
+        tokenOut,
+        3000,
+        amountIn,
+        0 // sqrtPriceLimitX96, set to 0 for no limit
+      );
+
+    const slippageMultiplier = 10000 - slippageBPS; // 10000 represents 100%
+    const amountOutMinimum = amountOut.mul(slippageMultiplier).div(10000);
+    return amountOutMinimum;
+  } catch (error) {
+    console.error("Error getting estimated amount out:", error);
+    throw error;
+  }
+}
+
 export {
   readLocalnetAddresses,
   encodeDestinationPayload,
   encodeZetachainPayload,
   preparePermitData,
+  getUniswapV3EstimatedAmountOut,
 };
