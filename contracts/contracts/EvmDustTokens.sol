@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 
 import {RevertContext, RevertOptions} from "@zetachain/protocol-contracts/contracts/Revert.sol";
 import "@zetachain/protocol-contracts/contracts/evm/interfaces/IGatewayEVM.sol";
 import {GatewayEVM} from "@zetachain/protocol-contracts/contracts/evm/GatewayEVM.sol";
+
+import {IPermit2} from "../lib/permit2/IPermit2.sol";
+import {ISignatureTransfer} from "../lib/permit2/ISignatureTransfer.sol";
+import {IAllowanceTransfer} from "../lib/permit2/IAllowanceTransfer.sol";
 
 // Interface for WETH9 to allow withdrawals
 interface IWETH is IERC20 {
@@ -33,6 +38,7 @@ interface IERC20Metadata is IERC20 {
 struct SwapInput {
     address token;
     uint256 amount;
+    uint256 minAmountOut;
 }
 
 struct SwapOutput {
@@ -43,12 +49,13 @@ struct SwapOutput {
 }
 
 contract EvmDustTokens is Ownable {
-    GatewayEVM public gateway;
-    uint256 constant BITCOIN = 18332;
+    GatewayEVM public immutable gateway;
+    ISwapRouter public immutable swapRouter;
+    IPermit2 public immutable permit2;
+    address payable public immutable WETH9;
+
     mapping(address => bool) public whitelistedTokens;
     address[] public tokenList;
-    ISwapRouter public immutable swapRouter;
-    address payable public immutable WETH9;
     uint24 public constant feeTier = 3000;
 
     event TokenAdded(address indexed token);
@@ -63,30 +70,43 @@ contract EvmDustTokens is Ownable {
         address outputToken,
         uint256 totalTokensReceived
     );
+    event Reverted(address recipient, address asset, uint256 amount);
+
+    modifier onlyGateway() {
+        require(msg.sender == address(gateway), "Caller is not the gateway");
+        _;
+    }
 
     constructor(
         address payable gatewayAddress,
         ISwapRouter _swapRouter,
         address payable _WETH9,
-        address initialOwner
+        address initialOwner,
+        IPermit2 _permit2
     ) Ownable(initialOwner) {
         gateway = GatewayEVM(gatewayAddress);
         swapRouter = _swapRouter;
         WETH9 = _WETH9;
+        permit2 = _permit2;
     }
 
     receive() external payable {}
 
     function SwapAndBridgeTokens(
-        SwapInput[] memory swaps,
+        SwapInput[] calldata swaps,
         address universalApp,
         bytes calldata payload,
-        RevertOptions calldata revertOptions
+        uint256 nonce,
+        uint256 deadline,
+        bytes calldata signature
     ) external {
         uint256 totalTokensReceived = 0;
         address outputToken = WETH9;
 
         require(swaps.length > 0, "No swaps provided");
+
+        // Batch transfer all input tokens using Permit2
+        signatureBatchTransfer(swaps, nonce, deadline, signature);
 
         // Array to store performed swaps
         SwapOutput[] memory performedSwaps = new SwapOutput[](swaps.length);
@@ -98,24 +118,6 @@ contract EvmDustTokens is Ownable {
             uint256 amount = swap.amount;
 
             require(whitelistedTokens[token], "Swap token not whitelisted");
-
-            // Check allowance and balance
-            uint256 allowance = IERC20(token).allowance(
-                msg.sender,
-                address(this)
-            );
-            require(allowance >= amount, "Insufficient allowance for token");
-
-            uint256 balance = IERC20(token).balanceOf(msg.sender);
-            require(balance >= amount, "Insufficient token balance");
-
-            // Transfer token from user to this contract
-            TransferHelper.safeTransferFrom(
-                token,
-                msg.sender,
-                address(this),
-                amount
-            );
 
             // Approve the swap router to spend the token
             TransferHelper.safeApprove(token, address(swapRouter), amount);
@@ -129,7 +131,7 @@ contract EvmDustTokens is Ownable {
                     recipient: address(this),
                     deadline: block.timestamp,
                     amountIn: amount,
-                    amountOutMinimum: 1, // TODO: Adjust for slippage tolerance
+                    amountOutMinimum: swap.minAmountOut,
                     sqrtPriceLimitX96: 0
                 });
 
@@ -148,6 +150,14 @@ contract EvmDustTokens is Ownable {
 
         IWETH(WETH9).withdraw(totalTokensReceived);
 
+        // Prepare the revert options
+        RevertOptions memory revertOptions = RevertOptions({
+            revertAddress: address(this),
+            callOnRevert: true,
+            abortAddress: address(0),
+            revertMessage: abi.encode(msg.sender),
+            onRevertGasLimit: 0
+        });
         gateway.depositAndCall{value: totalTokensReceived}(
             universalApp,
             payload,
@@ -241,6 +251,19 @@ contract EvmDustTokens is Ownable {
         return whitelistedTokens[token];
     }
 
+    // Function to check standard ERC20 allowance
+    function hasPermit2Allowance(
+        address user,
+        address token,
+        uint256 requiredAmount
+    ) external view returns (bool) {
+        uint256 allowanceAmount = IERC20(token).allowance(
+            user,
+            address(permit2)
+        );
+        return allowanceAmount >= requiredAmount;
+    }
+
     function getBalances(
         address user
     )
@@ -272,5 +295,93 @@ contract EvmDustTokens is Ownable {
                 balances[i] = token.balanceOf(user);
             }
         }
+    }
+
+    // Batch SignatureTransfer
+    function signatureBatchTransfer(
+        SwapInput[] calldata swaps,
+        uint256 nonce,
+        uint256 deadline,
+        bytes calldata signature
+    ) public {
+        uint256 length = swaps.length;
+
+        // Create arrays for TokenPermissions and SignatureTransferDetails
+        ISignatureTransfer.TokenPermissions[]
+            memory permitted = new ISignatureTransfer.TokenPermissions[](
+                length
+            );
+        ISignatureTransfer.SignatureTransferDetails[]
+            memory transferDetails = new ISignatureTransfer.SignatureTransferDetails[](
+                length
+            );
+
+        for (uint256 i = 0; i < length; i++) {
+            SwapInput calldata swap = swaps[i];
+            address token = swap.token;
+            uint256 amount = swap.amount;
+
+            // Check allowance and balance
+            uint256 allowance = IERC20(token).allowance(
+                msg.sender,
+                address(permit2)
+            );
+            require(allowance >= amount, "Insufficient allowance for token");
+
+            uint256 balance = IERC20(token).balanceOf(msg.sender);
+            require(balance >= amount, "Insufficient token balance");
+
+            permitted[i] = ISignatureTransfer.TokenPermissions({
+                token: token,
+                amount: amount
+            });
+
+            transferDetails[i] = ISignatureTransfer.SignatureTransferDetails({
+                to: address(this),
+                requestedAmount: amount
+            });
+        }
+
+        // Create the PermitBatchTransferFrom struct
+        ISignatureTransfer.PermitBatchTransferFrom
+            memory permit = ISignatureTransfer.PermitBatchTransferFrom({
+                permitted: permitted,
+                nonce: nonce,
+                deadline: deadline
+            });
+
+        // Execute the batched permit transfer
+        permit2.permitTransferFrom(
+            permit,
+            transferDetails,
+            msg.sender, // The owner of the tokens
+            signature
+        );
+    }
+
+    function onRevert(
+        RevertContext calldata revertContext
+    ) external payable onlyGateway {
+        // Decode the revert message
+        address originalSender = abi.decode(
+            revertContext.revertMessage,
+            (address)
+        );
+
+        // Transfer the reverted tokens back to the contract
+        if (revertContext.asset == address(0)) {
+            originalSender.call{value: revertContext.amount}("");
+        } else {
+            IERC20(revertContext.asset).transfer(
+                address(this),
+                revertContext.amount
+            );
+        }
+
+        emit Reverted(
+            originalSender,
+            revertContext.asset,
+            revertContext.amount
+        );
     }
 }
