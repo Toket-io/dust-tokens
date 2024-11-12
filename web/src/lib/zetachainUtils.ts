@@ -1,8 +1,8 @@
 import { ethers } from "ethers";
 import { SignatureTransfer, PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import EvmDustTokens from "../../../contracts/artifacts/contracts/EvmDustTokens.sol/EvmDustTokens.json";
-import path from "path";
-import fs from "fs";
+
+import LocalnetAddresses from "../../../contracts/localnet.json";
 
 export type TokenSwap = {
   amount: ethers.BigNumber;
@@ -34,26 +34,11 @@ const getReadOnlyEvmDustTokensContract = (
 };
 
 const readLocalnetAddresses = (chain: string, type: string) => {
-  const filePath = path.join(__dirname, "../../../contracts/localnet.json");
-
-  let data: LocalnetData = { pid: 0, addresses: [] };
-
-  // Read existing data if the file exists
-  if (fs.existsSync(filePath)) {
-    try {
-      const fileContent = fs.readFileSync(filePath, "utf-8");
-      data = JSON.parse(fileContent) as LocalnetData;
-    } catch (error) {
-      console.error("Error reading or parsing the JSON file:", error);
-      throw new Error("Failed to read the deployment data.");
-    }
-  }
-
-  if (!data.pid) {
+  if (!LocalnetAddresses.pid) {
     throw new Error("Localnet data not found");
   }
 
-  const addressesData: LocalnetData = data;
+  const addressesData: LocalnetData = LocalnetAddresses;
 
   const addressData = addressesData.addresses.find(
     (address) => address.chain === chain && address.type === type
@@ -64,52 +49,6 @@ const readLocalnetAddresses = (chain: string, type: string) => {
   }
 
   return addressData.address;
-};
-
-const writeAddressToFile = (chain: string, type: string, address: string) => {
-  const filePath = path.join(__dirname, "../../../contracts/localnet.json");
-
-  let data: LocalnetData = { pid: 0, addresses: [] };
-
-  // Read existing data if the file exists
-  if (fs.existsSync(filePath)) {
-    try {
-      const fileContent = fs.readFileSync(filePath, "utf-8");
-      data = JSON.parse(fileContent) as LocalnetData;
-    } catch (error) {
-      console.error("Error reading or parsing the JSON file:", error);
-      throw new Error("Failed to read the deployment data.");
-    }
-  }
-
-  // Check if an entry with the same chain and type exists
-  const existingEntryIndex = data.addresses.findIndex(
-    (entry) => entry.chain === chain && entry.type === type
-  );
-
-  if (existingEntryIndex !== -1) {
-    // Update the existing entry
-    data.addresses[existingEntryIndex].address = address;
-    console.log(
-      `✅ Updated address for chain: ${chain}, type: ${type} to ${address}`
-    );
-  } else {
-    // Add a new entry
-    const newEntry: AddressData = { address, chain, type };
-    data.addresses.push(newEntry);
-    console.log(
-      `✅ Added new address for chain: ${chain}, type: ${type} - ${address}`
-    );
-  }
-
-  // Write the updated data back to the file
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
-    console.log(`📦 Contract address saved to ${filePath}`);
-  } catch (error) {
-    console.error("Error writing to the JSON file:", error);
-    throw new Error("Failed to write the deployment data.");
-  }
 };
 
 const encodeDestinationPayload = (
@@ -248,7 +187,6 @@ export {
   getEvmDustTokensContract,
   getReadOnlyEvmDustTokensContract,
   readLocalnetAddresses,
-  writeAddressToFile,
   encodeDestinationPayload,
   encodeZetachainPayload,
   preparePermitData,

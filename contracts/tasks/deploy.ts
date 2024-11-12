@@ -2,18 +2,15 @@ import { PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import { task } from "hardhat/config";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
-import {
-  readLocalnetAddresses,
-  writeAddressToFile,
-} from "../../web/src/lib/zetachainUtils";
+import { readLocalnetAddresses, writeAddressToFile } from "./zetachainUtils";
 
 const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
   const network = hre.network.name;
 
   const [signer] = await hre.ethers.getSigners();
-  if (signer === undefined) {
+  if (!signer) {
     throw new Error(
-      `Wallet not found. Please, run "npx hardhat account --save" or set PRIVATE_KEY env variable (for example, in a .env file)`
+      `Wallet not found. Please run "npx hardhat account --save" or set the PRIVATE_KEY environment variable (e.g., in a .env file)`
     );
   }
 
@@ -37,7 +34,7 @@ const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
     console.log(JSON.stringify(contract));
   } else {
     console.log(`🔑 Using account: ${signer.address}
-
+    
 🚀 Successfully deployed ${args.name} contract on ${network}.
 📜 Contract address: ${contract.address}
 `);
@@ -51,9 +48,9 @@ const mainDust = async (args: any, hre: HardhatRuntimeEnvironment) => {
   const network = hre.network.name;
 
   const [signer] = await hre.ethers.getSigners();
-  if (signer === undefined) {
+  if (!signer) {
     throw new Error(
-      `Wallet not found. Please, run "npx hardhat account --save" or set PRIVATE_KEY env variable (for example, in a .env file)`
+      `Wallet not found. Please run "npx hardhat account --save" or set the PRIVATE_KEY environment variable (e.g., in a .env file)`
     );
   }
 
@@ -76,7 +73,7 @@ const mainDust = async (args: any, hre: HardhatRuntimeEnvironment) => {
     console.log(JSON.stringify(contract));
   } else {
     console.log(`🔑 Using account: ${signer.address}
-
+    
 🚀 Successfully deployed ${args.name} contract on ${network}.
 📜 Contract address: ${contract.address}
 `);
@@ -91,14 +88,31 @@ const mainDust = async (args: any, hre: HardhatRuntimeEnvironment) => {
     writeAddressToFile("ethereum", "uni", args.uni);
     writeAddressToFile("ethereum", "wbtc", args.wbtc);
     writeAddressToFile("ethereum", "link", args.link);
+
+    // Print default addresses
+    console.log(`📦 Default Addresses:
+----------------------------------------
+🦄 Uniswap Instances:
+- Uniswap Router V3: ${args.uniswapRouterV3}
+- Uniswap Quoter V3: ${args.uniswapQuoterV3}
+
+🪙 Token Addresses:
+- WETH: ${args.weth}
+- DAI:  ${args.dai}
+- USDC: ${args.usdc}
+- UNI:  ${args.uni}
+- WBTC: ${args.wbtc}
+- LINK: ${args.link}
+----------------------------------------
+`);
   }
 };
 
-task("deploy", "Deploy the contract", main)
+task("deployUniversalApp", "Deploy the Universal App contract", main)
   .addFlag("json", "Output in JSON")
   .addOptionalParam("name", "Contract to deploy", "Swap");
 
-task("deployDustTokens", "Deploy the contract EVM tokens", mainDust)
+task("deployEvmContract", "Deploy the contract EVM Dust tokens", mainDust)
   .addFlag("json", "Output in JSON")
   .addOptionalParam("name", "Contract to deploy", "EvmDustTokens")
   .addOptionalParam(

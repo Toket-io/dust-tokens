@@ -362,18 +362,23 @@ contract EvmDustTokens is Ownable {
     function onRevert(
         RevertContext calldata revertContext
     ) external payable onlyGateway {
-        // Decode the revert message
+        // Decode the revert message to get the original sender's address
         address originalSender = abi.decode(
             revertContext.revertMessage,
             (address)
         );
 
-        // Transfer the reverted tokens back to the contract
+        // Transfer the reverted tokens back to the original sender
         if (revertContext.asset == address(0)) {
-            originalSender.call{value: revertContext.amount}("");
+            // Transfer Ether
+            (bool success, ) = originalSender.call{value: revertContext.amount}(
+                ""
+            );
+            require(success, "Ether transfer failed");
         } else {
+            // Transfer ERC20 tokens
             IERC20(revertContext.asset).transfer(
-                address(this),
+                originalSender,
                 revertContext.amount
             );
         }

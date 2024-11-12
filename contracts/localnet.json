@@ -1,5 +1,5 @@
 {
-  "pid": 30846,
+  "pid": 43493,
   "addresses": [
     {
       "chain": "zetachain",
@@ -92,12 +92,7 @@
       "address": "0x9A213F53334279C128C37DA962E5472eCD90554f"
     },
     {
-      "address": "0x409C36E5Cd41DC79b8B6E13B2371aB6dA506Cb01",
-      "chain": "zetachain",
-      "type": "Swap"
-    },
-    {
-      "address": "0x9c03bEc812De6b13b7E3C538e100521bB81Aa186",
+      "address": "0x66908bE96DC195d937530b03f89f23EE54d5202d",
       "chain": "ethereum",
       "type": "EvmDustTokens"
     },
@@ -140,6 +135,11 @@
       "address": "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4",
       "chain": "ethereum",
       "type": "link"
+    },
+    {
+      "address": "0x7d48238d90421b64974188e5d43B34Be12f24bA4",
+      "chain": "zetachain",
+      "type": "Swap"
     }
   ]
 }

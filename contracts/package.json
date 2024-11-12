@@ -6,8 +6,8 @@
   "scripts": {
     "lint:fix": "npx eslint . --ext .js,.ts --fix",
     "lint": "npx eslint . --ext .js,.ts",
-    "deploy": "npx hardhat compile --force && npx hardhat deploy --network localhost",
-    "deployDustTokens": "npx hardhat compile --force && npx hardhat deployDustTokens --network localhost",
+    "deployUniversalApp": "npx hardhat compile --force && npx hardhat deployUniversalApp --network localhost",
+    "deployEvmContract": "npx hardhat compile --force && npx hardhat deployEvmContract --network localhost",
     "localnet": "npx hardhat localnet --network localhost",
     "localnet:arbitrum": "npx hardhat localnet --anvil '--fork-url=https://arb1.arbitrum.io/rpc --chain-id=31337' --network localhost",
     "test": "npx hardhat test --network localhost",
