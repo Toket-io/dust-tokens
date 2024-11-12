@@ -74,7 +74,6 @@ describe("EvmDustTokens", function () {
   let LINK: Contract;
   let UNI: Contract;
   let WBTC: Contract;
-  let startBalances: Object;
 
   // ZetaChain side Contracts
   let universalApp: Swap;
@@ -191,45 +190,6 @@ describe("EvmDustTokens", function () {
       swapAmount
     );
     await simpleSwapTx.wait();
-
-    // Check balances
-    const balances = {
-      dai: await DAI.balanceOf(signer.address),
-      link: await LINK.balanceOf(signer.address),
-      nativeEth: await signer.getBalance(),
-      uni: await UNI.balanceOf(signer.address),
-      usdc: await USDC.balanceOf(signer.address),
-      wbtc: await WBTC.balanceOf(signer.address),
-      weth: await WETH.balanceOf(signer.address),
-      zeta_eth: await ZETA_ETH.balanceOf(signer.address),
-      zeta_usdc_eth: await ZETA_USDC_ETH.balanceOf(signer.address),
-    };
-
-    const formattedBalances = {
-      dai: Number(hre.ethers.utils.formatUnits(balances.dai, DAI_DECIMALS)),
-      link: Number(hre.ethers.utils.formatUnits(balances.link, DAI_DECIMALS)),
-      nativeEth: Number(
-        hre.ethers.utils.formatUnits(balances.nativeEth, DAI_DECIMALS)
-      ),
-      uni: Number(hre.ethers.utils.formatUnits(balances.uni, DAI_DECIMALS)),
-      usdc: Number(hre.ethers.utils.formatUnits(balances.usdc, USDC_DECIMALS)),
-      wbtc: Number(hre.ethers.utils.formatUnits(balances.wbtc, DAI_DECIMALS)),
-      weth: Number(hre.ethers.utils.formatUnits(balances.weth, DAI_DECIMALS)),
-      zeta_eth: Number(
-        hre.ethers.utils.formatUnits(balances.zeta_eth, DAI_DECIMALS)
-      ),
-      zeta_usdc_eth: Number(
-        hre.ethers.utils.formatUnits(balances.zeta_usdc_eth, DAI_DECIMALS)
-      ),
-    };
-
-    console.log(
-      "\n-------\n Start Balances: ",
-      formattedBalances,
-      "\n-------\n"
-    );
-
-    startBalances = formattedBalances;
   });
 
   // MARK: Tests
