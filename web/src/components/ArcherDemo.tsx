@@ -29,12 +29,13 @@ import {
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 import { ethers } from "ethers";
 import { provider, signer } from "@/app/page";
-import ContractsConfig from "../../../ContractsConfig";
 import { toast } from "sonner";
 import TransactionStatus from "./TransactionStatus";
 import {
   encodeDestinationPayload,
   encodeZetachainPayload,
+  getEvmDustTokensContract,
+  getReadOnlyEvmDustTokensContract,
   preparePermitData,
   readLocalnetAddresses,
   TokenSwap,
@@ -77,7 +78,7 @@ const networks: Network[] = [
     label: "Ethereum",
     enabled: true,
     rpc: "http://localhost:8545",
-    contractAddress: ContractsConfig.evmDapp,
+    contractAddress: readLocalnetAddresses("ethereum", "EvmDustTokens"),
     zrc20Address: readLocalnetAddresses("zetachain", "ZRC-20 ETH on 5"),
     nativeToken: {
       name: "Ether (Native)",
@@ -92,8 +93,8 @@ const networks: Network[] = [
     label: "Binance Smart Chain",
     enabled: false,
     rpc: "",
-    contractAddress: ContractsConfig.evmDapp,
-    zrc20Address: readLocalnetAddresses("zetachain", "ZRC-20 ETH on 5"),
+    contractAddress: "",
+    zrc20Address: "",
     nativeToken: {
       name: "Ether (Native)",
       symbol: "ETH",
@@ -102,16 +103,6 @@ const networks: Network[] = [
       address: "0x0000000000000000000000000000000000000000",
     },
   },
-];
-
-export const CONTRACT_ABI = [
-  "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
-  "function hasPermit2Allowance(address user, address token, uint256 requiredAmount) view returns (bool)",
-  "function getTokens() view returns (address[], string[], string[], uint8[])",
-  "function SwapAndBridgeTokens((address token, uint256 amount, uint256 minAmountOut)[], address universalApp, bytes payload, uint256 nonce, uint256 deadline, bytes signature) public",
-  "function signatureBatchTransfer((address token, uint256 amount)[], uint256 nonce, uint256 deadline, bytes signature)",
-  "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
-  "event SwappedAndWithdrawn(address indexed receiver, address outputToken, uint256 totalTokensReceived)",
 ];
 
 export default function Component() {
@@ -216,9 +207,8 @@ export default function Component() {
 
   const fetchBalances = async () => {
     try {
-      const contractInstance = new ethers.Contract(
-        ContractsConfig.evmDapp,
-        CONTRACT_ABI,
+      const contractInstance = getEvmDustTokensContract(
+        readLocalnetAddresses("ethereum", "EvmDustTokens"),
         signer
       );
 
@@ -253,9 +243,8 @@ export default function Component() {
       );
 
       // Create a read-only contract instance by passing only the provider
-      const contractInstance = new ethers.Contract(
-        ContractsConfig.evmDapp,
-        CONTRACT_ABI,
+      const contractInstance = getReadOnlyEvmDustTokensContract(
+        selectedNetwork!.contractAddress,
         localhostProvider
       );
 
@@ -288,7 +277,7 @@ export default function Component() {
     const { domain, types, values, deadline, nonce } = await preparePermitData(
       provider,
       swaps,
-      ContractsConfig.evmDapp
+      readLocalnetAddresses("ethereum", "EvmDustTokens")
     );
     const signature = await signer._signTypedData(domain, types, values);
 
@@ -300,13 +289,7 @@ export default function Component() {
       // Validation checks
       const recipient = await signer.getAddress();
 
-      if (
-        !ContractsConfig.zeta_universalDapp ||
-        !signer ||
-        !recipient ||
-        !selectedNetwork ||
-        !selectedOutputToken
-      ) {
+      if (!signer || !recipient || !selectedNetwork || !selectedOutputToken) {
         throw new Error(
           "Required parameters are missing or not properly initialized"
         );
@@ -335,9 +318,8 @@ export default function Component() {
       const permit = await signPermit(tokenSwaps);
 
       // Create contract instance
-      const contractInstance = new ethers.Contract(
-        ContractsConfig.evmDapp,
-        CONTRACT_ABI,
+      const contractInstance = getEvmDustTokensContract(
+        readLocalnetAddresses("ethereum", "EvmDustTokens"),
         signer
       );
 
@@ -346,7 +328,7 @@ export default function Component() {
       // Step 2: Perform swap and bridge transaction
       const tx = await contractInstance.SwapAndBridgeTokens(
         tokenSwaps,
-        ContractsConfig.zeta_universalDapp,
+        readLocalnetAddresses("zetachain", "Swap"),
         encodedParameters,
         permit.nonce,
         permit.deadline,
@@ -379,9 +361,8 @@ export default function Component() {
       const localhostProvider = new ethers.providers.JsonRpcProvider(
         selectedNetwork.rpc
       );
-      const readOnlyContractInstance = new ethers.Contract(
-        ContractsConfig.evmDapp,
-        CONTRACT_ABI,
+      const readOnlyContractInstance = getReadOnlyEvmDustTokensContract(
+        selectedNetwork!.contractAddress,
         localhostProvider
       );
 

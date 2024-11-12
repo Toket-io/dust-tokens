@@ -4,7 +4,6 @@ import { expect } from "chai";
 import { Contract } from "ethers";
 import hre from "hardhat";
 
-import ContractsConfig from "../../ContractsConfig";
 import {
   encodeDestinationPayload,
   encodeZetachainPayload,
@@ -16,10 +15,6 @@ import {
 import { EvmDustTokens, SimpleSwap, Swap } from "../typechain-types";
 
 const DAI_DECIMALS = 18;
-const USDC_DECIMALS = 6;
-
-// EVM Gateway
-const GATEWAY_ADDRESS: string = readLocalnetAddresses("ethereum", "gatewayEVM");
 
 // Zetachain Contracts
 const ZETA_GATEWAY_ADDRESS: string = readLocalnetAddresses(
@@ -39,15 +34,23 @@ const ZETA_ETH_ADDRESS: string = readLocalnetAddresses(
   "ZRC-20 ETH on 5"
 );
 
-const WETH_ADDRESS: string = ContractsConfig.evm_weth ?? "";
-const DAI_ADDRESS: string = process.env.DAI_ADDRESS ?? "";
-const USDC_ADDRESS: string = process.env.USDC_ADDRESS ?? "";
-const UNI_ADDRESS = process.env.UNI_ADDRESS ?? "";
-const LINK_ADDRESS: string = process.env.LINK_ADDRESS ?? "";
-const WBTC_ADDRESS: string = process.env.WBTC_ADDRESS ?? "";
+// EVM Contracts
+const GATEWAY_ADDRESS: string = readLocalnetAddresses("ethereum", "gatewayEVM");
+const UNISWAP_ROUTER: string = readLocalnetAddresses(
+  "ethereum",
+  "uniswapRouterV3"
+);
+const UNISWAP_QUOTER: string = readLocalnetAddresses(
+  "ethereum",
+  "uniswapQuoterV3"
+);
 
-const UNISWAP_ROUTER: string = ContractsConfig.evm_uniswapRouterV3;
-const UNISWAP_QUOTER: string = ContractsConfig.evm_uniswapQuoterV3;
+const WETH_ADDRESS: string = readLocalnetAddresses("ethereum", "weth");
+const DAI_ADDRESS: string = readLocalnetAddresses("ethereum", "dai");
+const USDC_ADDRESS: string = readLocalnetAddresses("ethereum", "usdc");
+const UNI_ADDRESS = readLocalnetAddresses("ethereum", "uni");
+const LINK_ADDRESS: string = readLocalnetAddresses("ethereum", "link");
+const WBTC_ADDRESS: string = readLocalnetAddresses("ethereum", "wbtc");
 
 const ercAbi = [
   // Read-Only Functions

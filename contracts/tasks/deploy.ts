@@ -1,54 +1,11 @@
-import fs from "fs";
+import { PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import { task } from "hardhat/config";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import path from "path";
 
-// Helper function to read deployed contract addresses
-export const readAddressFromFile = (
-  network: string,
-  contractName: string
-): string => {
-  const filePath = path.join(__dirname, "deployed_addresses.json");
-
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Deployed contracts file not found at ${filePath}`);
-  }
-
-  const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-  const networkContracts = data[network];
-
-  if (!networkContracts || !networkContracts[contractName]) {
-    throw new Error(
-      `Contract address for ${contractName} not found on network ${network}`
-    );
-  }
-
-  return networkContracts[contractName];
-};
-
-const writeAddressToFile = (
-  network: string,
-  contractName: string,
-  address: string
-) => {
-  const filePath = path.join(__dirname, "deployed_addresses.json");
-
-  let data = {};
-  if (fs.existsSync(filePath)) {
-    const fileContent = fs.readFileSync(filePath, "utf-8");
-    data = JSON.parse(fileContent || "{}");
-  }
-
-  // Update the deployed addresses data
-  data[network] = {
-    ...(data[network] || {}),
-    [contractName]: address,
-  };
-
-  // Write the updated data back to the file
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-  console.log(`📦 Contract address saved to ${filePath}`);
-};
+import {
+  readLocalnetAddresses,
+  writeAddressToFile,
+} from "../../web/src/lib/zetachainUtils";
 
 const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
   const network = hre.network.name;
@@ -60,10 +17,19 @@ const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
     );
   }
 
+  const ZETA_SYSTEM_CONTRACT_ADDRESS: string = readLocalnetAddresses(
+    "zetachain",
+    "systemContract"
+  );
+  const ZETA_GATEWAY_ADDRESS: string = readLocalnetAddresses(
+    "zetachain",
+    "gatewayZEVM"
+  );
+
   const factory = await hre.ethers.getContractFactory(args.name);
   const contract = await (factory as any).deploy(
-    args.systemContract,
-    args.gatewayZetaChain
+    ZETA_SYSTEM_CONTRACT_ADDRESS,
+    ZETA_GATEWAY_ADDRESS
   );
   await contract.deployed();
 
@@ -77,7 +43,7 @@ const main = async (args: any, hre: HardhatRuntimeEnvironment) => {
 `);
 
     // Save the contract address to the file
-    writeAddressToFile(network, args.name, contract.address);
+    writeAddressToFile("zetachain", args.name, contract.address);
   }
 };
 
@@ -91,16 +57,18 @@ const mainDust = async (args: any, hre: HardhatRuntimeEnvironment) => {
     );
   }
 
-  // Read the swap address from the deployed contracts file
-  const swapAddress = readAddressFromFile(network, "Swap");
-  const routerAddress = readAddressFromFile(network, "UniswapV2Router");
+  const GATEWAY_ADDRESS: string = readLocalnetAddresses(
+    "ethereum",
+    "gatewayEVM"
+  );
 
   const factory = await hre.ethers.getContractFactory(args.name);
   const contract = await (factory as any).deploy(
-    "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
-    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-    "0x6B175474E89094C44Da98b954EedeAC495271d0F",
-    3000
+    GATEWAY_ADDRESS,
+    args.uniswapRouterV3,
+    args.weth,
+    signer.address,
+    PERMIT2_ADDRESS
   );
   await contract.deployed();
 
@@ -114,36 +82,62 @@ const mainDust = async (args: any, hre: HardhatRuntimeEnvironment) => {
 `);
 
     // Save the contract address to the file
-    writeAddressToFile(network, args.name, contract.address);
+    writeAddressToFile("ethereum", args.name, contract.address);
+    writeAddressToFile("ethereum", "uniswapRouterV3", args.uniswapRouterV3);
+    writeAddressToFile("ethereum", "uniswapQuoterV3", args.uniswapQuoterV3);
+    writeAddressToFile("ethereum", "weth", args.weth);
+    writeAddressToFile("ethereum", "dai", args.dai);
+    writeAddressToFile("ethereum", "usdc", args.usdc);
+    writeAddressToFile("ethereum", "uni", args.uni);
+    writeAddressToFile("ethereum", "wbtc", args.wbtc);
+    writeAddressToFile("ethereum", "link", args.link);
   }
 };
 
 task("deploy", "Deploy the contract", main)
   .addFlag("json", "Output in JSON")
-  .addOptionalParam("name", "Contract to deploy", "Swap")
-  .addOptionalParam(
-    "systemContract",
-    "System contract",
-    // "0xefFEA911a7d05d960355F2F32d2101138c9631dd"
-    "0x610178dA211FEF7D417bC0e6FeD39F05609AD788"
-  )
-  .addOptionalParam(
-    "gatewayZetaChain",
-    "Gateway address",
-    // "0x6CC14037395F7B84ba4eDaF239a6D97f0DcE3CEf"
-    "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0"
-  );
+  .addOptionalParam("name", "Contract to deploy", "Swap");
 
 task("deployDustTokens", "Deploy the contract EVM tokens", mainDust)
   .addFlag("json", "Output in JSON")
   .addOptionalParam("name", "Contract to deploy", "EvmDustTokens")
   .addOptionalParam(
-    "systemContract",
-    "System contract",
-    "0x610178dA211FEF7D417bC0e6FeD39F05609AD788"
+    "uniswapRouterV3",
+    "Uniswap V3 Router instance. Defaults to Arbitrum address",
+    "0xE592427A0AEce92De3Edee1F18E0157C05861564"
   )
   .addOptionalParam(
-    "gatewayZetaChain",
-    "Gateway address",
-    "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+    "uniswapQuoterV3",
+    "Uniswap V3 Quoter instance. Defaults to Arbitrum address",
+    "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6"
+  )
+  .addOptionalParam(
+    "weth",
+    "WETH instance. Defaults to Arbitrum address",
+    "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+  )
+  .addOptionalParam(
+    "dai",
+    "DAI instance. Defaults to Arbitrum address",
+    "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1"
+  )
+  .addOptionalParam(
+    "usdc",
+    "USDC instance. Defaults to Arbitrum address",
+    "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+  )
+  .addOptionalParam(
+    "uni",
+    "UNI instance. Defaults to Arbitrum address",
+    "0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0"
+  )
+  .addOptionalParam(
+    "wbtc",
+    "WBTC instance. Defaults to Arbitrum address",
+    "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f"
+  )
+  .addOptionalParam(
+    "link",
+    "LINK instance. Defaults to Arbitrum address",
+    "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"
   );

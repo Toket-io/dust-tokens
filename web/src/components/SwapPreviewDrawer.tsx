@@ -17,12 +17,15 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer";
 import { ArrowDown, Coins } from "lucide-react";
-import { CONTRACT_ABI, Network, SelectedToken, Token } from "./ArcherDemo";
+import { Network, SelectedToken, Token } from "./ArcherDemo";
 import { toast } from "sonner";
 import { ethers } from "ethers";
 import { provider, signer } from "@/app/page";
-import ContractsConfig from "../../../ContractsConfig";
-import { getUniswapV3EstimatedAmountOut } from "@/lib/zetachainUtils";
+import {
+  getEvmDustTokensContract,
+  getUniswapV3EstimatedAmountOut,
+  readLocalnetAddresses,
+} from "@/lib/zetachainUtils";
 import { Badge } from "./ui/badge";
 import { PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 
@@ -78,9 +81,8 @@ export function SwapPreviewDrawer({
   const checkPermit2Enabled = async (
     token: SelectedToken
   ): Promise<boolean> => {
-    const contractInstance = new ethers.Contract(
-      ContractsConfig.evmDapp,
-      CONTRACT_ABI,
+    const contractInstance = getEvmDustTokensContract(
+      readLocalnetAddresses("ethereum", "EvmDustTokens"),
       signer
     );
 
@@ -142,9 +144,9 @@ export function SwapPreviewDrawer({
         );
         const swapTokenAmount = await getUniswapV3EstimatedAmountOut(
           provider,
-          ContractsConfig.evm_uniswapQuoterV3,
+          readLocalnetAddresses("ethereum", "uniswapQuoterV3"),
           token.address,
-          ContractsConfig.evm_weth!,
+          readLocalnetAddresses("ethereum", "weth"),
           parsedAmount,
           slippageBPS
         );
@@ -154,8 +156,8 @@ export function SwapPreviewDrawer({
 
       const outputTokenAmount = await getUniswapV3EstimatedAmountOut(
         provider,
-        ContractsConfig.evm_uniswapQuoterV3,
-        ContractsConfig.evm_weth!,
+        readLocalnetAddresses("ethereum", "uniswapQuoterV3"),
+        readLocalnetAddresses("ethereum", "weth"),
         selectedOutputToken.address,
         transportTokenAmount,
         slippageBPS
@@ -188,70 +190,6 @@ export function SwapPreviewDrawer({
       console.error("Error calculating output token amount:", error);
     }
   };
-
-  async function getUniswapV2AmountOut(
-    tokenIn: string,
-    tokenOut: string,
-    amountIn: ethers.BigNumber
-  ) {
-    const uniswapV2FactoryAddress = ContractsConfig.zeta_uniswapFactoryV2;
-    const uniswapV2FactoryAbi = [
-      "function getPair(address tokenA, address tokenB) external view returns (address pair)",
-    ];
-    const uniswapV2Factory = new ethers.Contract(
-      uniswapV2FactoryAddress,
-      uniswapV2FactoryAbi,
-      provider
-    );
-    const uniswapV2PairAbi = [
-      "function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
-      "function token0() external view returns (address)",
-      "function token1() external view returns (address)",
-    ];
-    try {
-      // Step 1: Get the pair address
-      const pairAddress = await uniswapV2Factory.getPair(tokenIn, tokenOut);
-      if (pairAddress === ethers.constants.AddressZero) {
-        throw new Error("Pair does not exist.");
-      }
-
-      // Step 2: Create a contract instance for the pair
-      const pairContract = new ethers.Contract(
-        pairAddress,
-        uniswapV2PairAbi,
-        provider
-      );
-
-      // Step 3: Get reserves and token order
-      const [reserve0, reserve1] = await pairContract.getReserves();
-      const token0 = await pairContract.token0();
-      const token1 = await pairContract.token1();
-
-      // Step 4: Determine the correct reserve ordering
-      let reserveIn, reserveOut;
-      if (tokenIn.toLowerCase() === token0.toLowerCase()) {
-        reserveIn = reserve0;
-        reserveOut = reserve1;
-      } else if (tokenIn.toLowerCase() === token1.toLowerCase()) {
-        reserveIn = reserve1;
-        reserveOut = reserve0;
-      } else {
-        throw new Error("Invalid token addresses.");
-      }
-
-      // Step 5: Apply the Uniswap V2 formula to get the amount out
-      // Uniswap V2 formula: amountOut = (amountIn * 997 * reserveOut) / (reserveIn * 1000 + amountIn * 997)
-      const amountInWithFee = amountIn.mul(997);
-      const numerator = amountInWithFee.mul(reserveOut);
-      const denominator = reserveIn.mul(1000).add(amountInWithFee);
-      const amountOut = numerator.div(denominator);
-
-      return amountOut;
-    } catch (error) {
-      console.error("Error getting estimated amount out:", error);
-      throw error;
-    }
-  }
 
   const handleConfirm = async () => {
     setSaving(true);
