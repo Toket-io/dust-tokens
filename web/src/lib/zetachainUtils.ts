@@ -1,6 +1,8 @@
 import { SignatureTransfer, PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import EvmDustTokens from "../../../contracts/artifacts/contracts/EvmDustTokens.sol/EvmDustTokens.json";
 import LocalnetAddresses from "../../../contracts/localnet.json";
+import { ethers } from "ethers";
+import { TokenSwap } from "./types";
 
 type AddressData = {
   chain: string;

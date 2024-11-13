@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from "react";
-import { useMediaQuery } from "@/hooks/use-media-query";
+import React, { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,8 +20,8 @@ import {
   EvmDustTokens,
   preparePermitData,
 } from "@/lib/zetachainUtils";
-import { useAccount, useWriteContract } from "wagmi";
 import { Network, SelectedToken, Token, TokenSwap } from "@/lib/types";
+import { useAccount, useWriteContract } from "wagmi";
 import SwapTokenLine from "./SwapTokenLine";
 type ProfileFormDrawerProps = {
   selectedTokens: SelectedToken[];
