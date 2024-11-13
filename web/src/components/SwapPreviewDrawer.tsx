@@ -30,16 +30,14 @@ import {
   EvmDustTokens,
   preparePermitData,
 } from "@/lib/zetachainUtils";
-import { Badge } from "./ui/badge";
-import { PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import { Network, SelectedToken, Token } from "@/lib/types";
-import { useAccount, useSendTransaction, useWriteContract } from "wagmi";
+import { useAccount, useWriteContract } from "wagmi";
+import SwapTokenLine from "./SwapTokenLine";
 type ProfileFormDrawerProps = {
   selectedTokens: SelectedToken[];
   selectedNetwork: Network;
   selectedOutputToken: Token;
   disabled?: boolean;
-  onConfirm: (selectedTokens: SelectedToken[]) => void;
 };
 
 export function SwapPreviewDrawer({
@@ -47,14 +45,9 @@ export function SwapPreviewDrawer({
   selectedNetwork,
   selectedOutputToken,
   disabled = false,
-  onConfirm,
 }: ProfileFormDrawerProps) {
   const [open, setOpen] = React.useState(false);
   const [amountOut, setAmountOut] = React.useState<string | null>(null);
-  const isDesktop = useMediaQuery("(min-width: 768px)");
-  const [permit2Status, setPermit2Status] = useState<{
-    [key: string]: boolean;
-  }>({});
 
   const { address } = useAccount();
   const { data: hash, isPending, writeContract } = useWriteContract();
@@ -63,65 +56,11 @@ export function SwapPreviewDrawer({
     const initializeProvider = async () => {
       if (open) {
         calculateOutputTokenAmount();
-        validatePermit2();
       }
     };
 
     initializeProvider();
   }, [open, selectedTokens, selectedNetwork, selectedOutputToken]);
-
-  const validatePermit2 = async () => {
-    const newStatus: { [key: string]: boolean } = {};
-    for (const token of selectedTokens) {
-      try {
-        // Replace this with your actual Permit2 validation logic
-        const isEnabled = await checkPermit2Enabled(token);
-        newStatus[token.address] = isEnabled;
-      } catch (error) {
-        console.error(`Error validating Permit2 for ${token.symbol}:`, error);
-        newStatus[token.address] = false;
-      }
-    }
-    setPermit2Status(newStatus);
-  };
-
-  const checkPermit2Enabled = async (
-    token: SelectedToken
-  ): Promise<boolean> => {
-    const contractInstance = getEvmDustTokensContract(
-      readLocalnetAddresses("ethereum", "EvmDustTokens"),
-      signer
-    );
-
-    const result = await contractInstance.hasPermit2Allowance(
-      await signer.getAddress(),
-      token.address,
-      ethers.utils.parseUnits(token.amount, token.decimals)
-    );
-
-    return result;
-  };
-
-  const enablePermit2 = async (tokenAddress: string) => {
-    try {
-      const ercAbi = [
-        "function approve(address spender, uint256 amount) returns (bool)",
-      ];
-
-      const tokenContract = new ethers.Contract(tokenAddress, ercAbi, signer);
-      const tx = await tokenContract.approve(
-        PERMIT2_ADDRESS,
-        ethers.constants.MaxUint256
-      );
-      await tx.wait();
-
-      setPermit2Status((prev) => ({ ...prev, [tokenAddress]: true }));
-      toast.success(`Permit2 enabled for ${tokenAddress}`);
-    } catch (error) {
-      console.error(`Error enabling Permit2 for ${tokenAddress}:`, error);
-      toast.error(`Failed to enable Permit2 for ${tokenAddress}`);
-    }
-  };
 
   function truncateToDecimals(value: string, decimals: number) {
     if (value.indexOf(".") === -1) {
@@ -254,7 +193,6 @@ export function SwapPreviewDrawer({
       });
 
       setOpen(false);
-      // onConfirm(selectedTokens);
     } catch (error) {
       toast.error("Something went wrong. Please try again later.", {
         position: "top-center",
@@ -262,107 +200,56 @@ export function SwapPreviewDrawer({
     }
   };
 
-  if (isDesktop) {
-    return (
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button size="lg" disabled={disabled}>
-            <Coins className="w-4 h-4 mr-2" />
-            Preview Swap
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="sm:max-w-[720px]">
-          <DialogHeader>
-            <DialogTitle className="w-full text-center">
-              Preview Swap
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="font-semibold">Input Tokens:</div>
-            {selectedTokens.map((token, index) => (
-              <div key={index}>
-                <div className="flex justify-between items-center">
-                  <span>
-                    {token.name} {`(${token.symbol})`}
-                  </span>
-                  <span>{token.amount}</span>
-                </div>
-
-                {permit2Status[token.address] === false && (
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-red-500 mr-2 text-xs">
-                      Permit2 not enabled for {token.symbol}
-                    </span>
-                    <Badge
-                      className="cursor-pointer"
-                      variant="destructive"
-                      onClick={() => enablePermit2(token.address)}
-                    >
-                      Enable
-                    </Badge>
-                  </div>
-                )}
-              </div>
-            ))}
-            <div className="flex justify-center my-2">
-              <ArrowDown className="h-6 w-6" />
-            </div>
-            <div className="font-semibold">Output Network & Token:</div>
-            <div className="flex justify-between items-center">
-              <span>{`${selectedOutputToken?.name} @ ${selectedNetwork?.label}`}</span>
-              <span>
-                {amountOut
-                  ? `${amountOut} ${selectedOutputToken?.symbol}`
-                  : "Calculating..."}
-              </span>
-            </div>
-          </div>
-          <DialogFooter className="flex flex-column mt-4">
-            <Button
-              variant="default"
-              disabled={
-                disabled ||
-                !amountOut ||
-                Object.values(permit2Status).some((status) => status === false)
-              }
-              loading={isPending}
-              size="full"
-              onClick={handleConfirm}
-            >
-              Confirm
-            </Button>
-            <Button
-              variant="outline"
-              disabled={disabled || !amountOut || isPending}
-              size="full"
-              onClick={() => setOpen(false)}
-            >
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
-
   return (
-    <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         <Button size="lg" disabled={disabled}>
           <Coins className="w-4 h-4 mr-2" />
           Preview Swap
         </Button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <div>Content</div>
-        <DrawerFooter className="pt-2">
-          <DrawerClose asChild>
-            <Button disabled={disabled} variant="outline">
-              Cancel
-            </Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[720px]">
+        <DialogHeader>
+          <DialogTitle className="w-full text-center">Preview Swap</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="font-semibold">Input Tokens:</div>
+          {selectedTokens.map((token, index) => (
+            <SwapTokenLine token={token} key={index} />
+          ))}
+          <div className="flex justify-center my-2">
+            <ArrowDown className="h-6 w-6" />
+          </div>
+          <div className="font-semibold">Output Network & Token:</div>
+          <div className="flex justify-between items-center">
+            <span>{`${selectedOutputToken?.name} @ ${selectedNetwork?.label}`}</span>
+            <span>
+              {amountOut
+                ? `${amountOut} ${selectedOutputToken?.symbol}`
+                : "Calculating..."}
+            </span>
+          </div>
+        </div>
+        <DialogFooter className="flex flex-column mt-4">
+          <Button
+            variant="default"
+            disabled={disabled || !amountOut}
+            loading={isPending}
+            size="full"
+            onClick={handleConfirm}
+          >
+            Confirm
+          </Button>
+          <Button
+            variant="outline"
+            disabled={disabled || !amountOut || isPending}
+            size="full"
+            onClick={() => setOpen(false)}
+          >
+            Cancel
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
