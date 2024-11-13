@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import { Check, ChevronsUpDown, Coins, RotateCcw, X } from "lucide-react";
+import { Check, ChevronsUpDown, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ArcherContainer, ArcherElement } from "react-archer";
 import {
@@ -19,66 +19,24 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 import { ethers } from "ethers";
-import { provider, signer } from "@/app/page";
-import ContractsConfig from "../../../ContractsConfig";
 import { toast } from "sonner";
-import { SignatureTransfer, PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import TransactionStatus from "./TransactionStatus";
-import {
-  encodeDestinationPayload,
-  encodeZetachainPayload,
-  preparePermitData,
-  TokenSwap,
-} from "@/lib/zetachainUtils";
-
-export interface Token {
-  name: string;
-  symbol: string;
-  decimals: number;
-  balance: number;
-  address: string;
-}
-
-export type SelectedToken = Token & {
-  amount: string;
-  isMax: boolean;
-  hasPermit2Allowance: boolean;
-};
-
-export type Network = {
-  value: string;
-  label: string;
-  enabled: boolean;
-  rpc: string;
-  contractAddress: string;
-  zrc20Address: string;
-  nativeToken: Token;
-};
-
-export type TransactionState =
-  | "notStarted"
-  | "sourcePending"
-  | "zetaPending"
-  | "destinationPending"
-  | "completed";
+import { readLocalnetAddresses, EvmDustTokens } from "@/lib/zetachainUtils";
+import { Network, SelectedToken, Token, TransactionState } from "@/lib/types";
+import { useAccount, useReadContract, useWatchContractEvent } from "wagmi";
 
 const networks: Network[] = [
   {
+    id: 31337,
     value: "ethereum",
     label: "Ethereum",
     enabled: true,
     rpc: "http://localhost:8545",
-    contractAddress: ContractsConfig.evmDapp,
-    zrc20Address: ContractsConfig.zeta_ethEthToken,
+    contractAddress: readLocalnetAddresses("ethereum", "EvmDustTokens"),
+    zrc20Address: readLocalnetAddresses("zetachain", "ZRC-20 ETH on 5"),
     nativeToken: {
       name: "Ether (Native)",
       symbol: "ETH",
@@ -88,12 +46,13 @@ const networks: Network[] = [
     },
   },
   {
+    id: 0,
     value: "binance",
     label: "Binance Smart Chain",
     enabled: false,
     rpc: "",
-    contractAddress: ContractsConfig.evmDapp,
-    zrc20Address: ContractsConfig.zeta_ethEthToken,
+    contractAddress: "",
+    zrc20Address: "",
     nativeToken: {
       name: "Ether (Native)",
       symbol: "ETH",
@@ -102,16 +61,6 @@ const networks: Network[] = [
       address: "0x0000000000000000000000000000000000000000",
     },
   },
-];
-
-const CONTRACT_ABI = [
-  "function getBalances(address user) view returns (address[], string[], string[], uint8[], uint256[])",
-  "function hasPermit2Allowance(address user, address token, uint256 requiredAmount) view returns (bool)",
-  "function getTokens() view returns (address[], string[], string[], uint8[])",
-  "function SwapAndBridgeTokens((address token, uint256 amount)[], address universalApp, bytes payload, (address revertAddress, bool callOnRevert, address abortAddress, bytes revertMessage, uint256 onRevertGasLimit) revertOptions, uint256 nonce, uint256 deadline, bytes signature) public",
-  "function signatureBatchTransfer((address token, uint256 amount)[], uint256 nonce, uint256 deadline, bytes signature)",
-  "event SwappedAndDeposited(address indexed executor, (address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOut)[] swaps, uint256 totalTokensReceived)",
-  "event SwappedAndWithdrawn(address indexed receiver, address outputToken, uint256 totalTokensReceived)",
 ];
 
 export default function Component() {
@@ -129,24 +78,124 @@ export default function Component() {
   const [transactionStatus, setTransactionStatus] =
     useState<TransactionState>("notStarted");
 
-  useEffect(() => {
-    const initializeProvider = async () => {
-      fetchBalances();
-    };
+  const { address, isConnected } = useAccount();
 
-    initializeProvider();
-  }, []);
+  // MARK: Source chain contract hooks
+  const { data: rawBalances, isPending: balancesPending } = useReadContract({
+    abi: EvmDustTokens.abi,
+    address: readLocalnetAddresses(
+      "ethereum",
+      "EvmDustTokens"
+    ) as `0x${string}`,
+    functionName: "getBalances",
+    args: [address],
+    query: {
+      enabled: !!address,
+    },
+  });
+
+  useWatchContractEvent({
+    abi: EvmDustTokens.abi,
+    address: readLocalnetAddresses(
+      "ethereum",
+      "EvmDustTokens"
+    ) as `0x${string}`,
+    eventName: "SwappedAndDeposited",
+    args: {
+      executor: address,
+    },
+    enabled: !!address,
+    onLogs(logs) {
+      // Loop through logs and check if the executor is the recipient
+      logs.forEach((log) => {
+        const { executor, swaps, totalTokensReceived } = log.args;
+        if (executor.toLowerCase() === address?.toLowerCase()) {
+          setTransactionStatus("destinationPending");
+        }
+      });
+    },
+  });
 
   useEffect(() => {
-    if (selectedNetwork) {
-      fetchOutputBalances();
-    } else {
-      setOutputBalances([]);
+    if (rawBalances) {
+      const formattedBalances = formatTokenBalances(rawBalances);
+      setBalances(formattedBalances);
     }
-  }, [selectedNetwork]);
+  }, [rawBalances]);
 
-  const handleSwapConfirm = async () => {
-    await handleSwapAndBridge();
+  // MARK: Destination chain contract hooks
+  const {
+    data: rawBalancesDestination,
+    isPending: balancesPendingDestination,
+  } = useReadContract({
+    abi: EvmDustTokens.abi,
+    address: selectedNetwork?.contractAddress as `0x${string}`,
+    chainId: selectedNetwork?.id,
+    functionName: "getBalances",
+    args: [address],
+    query: {
+      enabled: !!address && !!selectedNetwork,
+    },
+  });
+
+  useWatchContractEvent({
+    abi: EvmDustTokens.abi,
+    address: selectedNetwork?.contractAddress as `0x${string}`,
+    chainId: selectedNetwork?.id,
+    eventName: "SwappedAndWithdrawn",
+    args: {
+      receiver: address,
+    },
+    enabled: !!address && !!selectedNetwork,
+    onLogs(logs) {
+      // Loop through logs and check if the executor is the recipient
+      logs.forEach((log) => {
+        const { receiver, outputToken, totalTokensReceived } = log.args;
+        // Filter based on signer
+        if (receiver.toLowerCase() === address?.toLowerCase()) {
+          const formattedAmount = ethers.utils.formatUnits(
+            totalTokensReceived,
+            selectedOutputToken?.decimals
+          );
+
+          // Mark transaction as complete and show success
+          setTransactionStatus("completed");
+          toast.success(
+            "Your tokens have been successfully swapped and bridged!",
+            {
+              description: `You have received: ${formattedAmount} ${selectedOutputToken?.symbol}`,
+              position: "top-center",
+              duration: 8000,
+            }
+          );
+        }
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (rawBalancesDestination) {
+      const formattedBalances = formatTokenBalances(rawBalancesDestination);
+      setOutputBalances(formattedBalances);
+    }
+  }, [rawBalancesDestination]);
+
+  const formatTokenBalances = (rawBalances: any) => {
+    const addresses = rawBalances[0];
+    const names = rawBalances[1];
+    const symbols = rawBalances[2];
+    const decimals = rawBalances[3];
+    const tokenBalances = rawBalances[4];
+
+    return addresses.map((address: string, index: number) => ({
+      address,
+      name: names[index],
+      symbol: symbols[index],
+      decimals: decimals[index],
+      balance: Number(
+        ethers.utils.formatUnits(tokenBalances[index], decimals[index])
+      ),
+    }));
   };
 
   const handleSelectToken = (token: Token) => {
@@ -180,44 +229,7 @@ export default function Component() {
     setOpenNetwork(false);
   };
 
-  const handleApprovePermit2 = async (token: Token) => {
-    const ercAbi = [
-      "function approve(address spender, uint256 amount) returns (bool)",
-    ];
-
-    const tokenContract = new ethers.Contract(token.address, ercAbi, signer);
-    const tx = await tokenContract.approve(
-      PERMIT2_ADDRESS,
-      ethers.constants.MaxUint256
-    );
-    await tx.wait();
-
-    console.log("Approved token");
-  };
-
   const handleAmountChange = async (tokenValue: string, amount: string) => {
-    // TODO: Check that amount is a valid number and within the token's balance
-
-    const contractInstance = new ethers.Contract(
-      ContractsConfig.evmDapp,
-      CONTRACT_ABI,
-      signer
-    );
-
-    const selectedToken = selectedTokens.find(
-      (token) => token.symbol === tokenValue
-    );
-
-    let hasPermit2Allowance = true;
-    if (selectedToken && amount !== "") {
-      console.log("CHECKING PERMIT2 ALLOWANCE: ", selectedToken);
-      await contractInstance.hasPermit2Allowance(
-        signer.address,
-        selectedToken.address,
-        ethers.utils.parseUnits(amount, selectedToken.decimals)
-      );
-    }
-
     setSelectedTokens(
       selectedTokens.map((token) =>
         token.symbol === tokenValue
@@ -225,7 +237,6 @@ export default function Component() {
               ...token,
               amount,
               isMax: false,
-              hasPermit2Allowance,
             }
           : token
       )
@@ -247,220 +258,6 @@ export default function Component() {
     setSelectedOutputToken(null);
     setSelectedNetwork(null);
     setTransactionStatus("notStarted");
-    fetchBalances();
-  };
-
-  const fetchBalances = async () => {
-    try {
-      const contractInstance = new ethers.Contract(
-        ContractsConfig.evmDapp,
-        CONTRACT_ABI,
-        signer
-      );
-
-      setLoading(true);
-      const [addresses, names, symbols, decimals, tokenBalances] =
-        await contractInstance.getBalances(signer.address);
-      const formattedBalances: Token[] = addresses.map((address, index) => ({
-        address,
-        name: names[index],
-        symbol: symbols[index],
-        decimals: decimals[index],
-        balance: Number(
-          ethers.utils.formatUnits(tokenBalances[index], decimals[index])
-        ),
-      }));
-      setBalances(formattedBalances);
-    } catch (error) {
-      console.error("Error fetching balances:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchOutputBalances = async () => {
-    try {
-      setLoading(true);
-
-      console.log("Selected network:", selectedNetwork);
-
-      const localhostProvider = new ethers.providers.JsonRpcProvider(
-        selectedNetwork!.rpc
-      );
-
-      // Create a read-only contract instance by passing only the provider
-      const contractInstance = new ethers.Contract(
-        ContractsConfig.evmDapp,
-        CONTRACT_ABI,
-        localhostProvider
-      );
-
-      const [addresses, names, symbols, decimals, tokenBalances] =
-        await contractInstance.getBalances(signer.address);
-      const formattedBalances: Token[] = addresses.map((address, index) => ({
-        address,
-        name: names[index],
-        symbol: symbols[index],
-        decimals: decimals[index],
-        balance: Number(
-          ethers.utils.formatUnits(tokenBalances[index], decimals[index])
-        ),
-      }));
-
-      console.log("Output balances:", formattedBalances);
-
-      // Add native token to the list of output balances
-      formattedBalances.push(selectedNetwork.nativeToken);
-
-      setOutputBalances(formattedBalances);
-    } catch (error) {
-      console.error("Error fetching balances:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signPermit = async (swaps: TokenSwap[]) => {
-    const { domain, types, values, deadline, nonce } = await preparePermitData(
-      provider,
-      swaps,
-      ContractsConfig.evmDapp
-    );
-    const signature = await signer._signTypedData(domain, types, values);
-
-    return { deadline, nonce, signature };
-  };
-
-  const handleSwapAndBridge = async () => {
-    try {
-      // Validation checks
-      if (
-        !ContractsConfig.zeta_universalDapp ||
-        !signer ||
-        !signer.address ||
-        !selectedNetwork ||
-        !selectedOutputToken
-      ) {
-        throw new Error(
-          "Required parameters are missing or not properly initialized"
-        );
-      }
-
-      // Step 1: Prepare payloads
-      const recipient = signer.address;
-      const outputToken = selectedOutputToken.address;
-      const destinationPayload = encodeDestinationPayload(
-        recipient,
-        outputToken
-      );
-      const encodedParameters = encodeZetachainPayload(
-        selectedNetwork.zrc20Address,
-        selectedNetwork.contractAddress,
-        recipient,
-        destinationPayload
-      );
-      const revertOptions = {
-        abortAddress: "0x0000000000000000000000000000000000000000",
-        callOnRevert: false,
-        onRevertGasLimit: 7000000,
-        revertAddress: "0x0000000000000000000000000000000000000000",
-        revertMessage: ethers.utils.hexlify(ethers.utils.toUtf8Bytes("0x")),
-      };
-      const tokenSwaps: TokenSwap[] = selectedTokens.map(
-        ({ amount, decimals, address }) => ({
-          amount: ethers.utils.parseUnits(amount, decimals),
-          token: address,
-          minAmountOut: ethers.constants.Zero,
-        })
-      );
-
-      const permit = await signPermit(tokenSwaps);
-
-      // Create contract instance
-      const contractInstance = new ethers.Contract(
-        ContractsConfig.evmDapp,
-        CONTRACT_ABI,
-        signer
-      );
-
-      setTransactionStatus("sourcePending");
-
-      // Step 2: Perform swap and bridge transaction
-      const tx = await contractInstance.SwapAndBridgeTokens(
-        tokenSwaps,
-        ContractsConfig.zeta_universalDapp,
-        encodedParameters,
-        revertOptions,
-        permit.nonce,
-        permit.deadline,
-        permit.signature
-      );
-
-      const receipt = tx.wait();
-
-      console.log("Transaction submitted:", tx.hash, receipt);
-
-      setTransactionStatus("zetaPending");
-
-      // Optional: Attach listener for SwappedAndDeposited if intermediate status updates are needed
-      contractInstance.on(
-        "SwappedAndDeposited",
-        (executor, swaps, totalTokensReceived) => {
-          if (executor.toLowerCase() === signer.address.toLowerCase()) {
-            // Filter based on signer
-
-            setTransactionStatus("destinationPending");
-
-            console.log("SwappedAndDeposited event detected for signer!");
-            const totalEther = ethers.utils.formatEther(totalTokensReceived);
-            console.log("Total Tokens Received:", totalEther);
-          }
-        }
-      );
-
-      // Step 3: Listen for the final 'SwappedAndWithdrawn' event to mark success
-      const localhostProvider = new ethers.providers.JsonRpcProvider(
-        selectedNetwork.rpc
-      );
-      const readOnlyContractInstance = new ethers.Contract(
-        ContractsConfig.evmDapp,
-        CONTRACT_ABI,
-        localhostProvider
-      );
-
-      const onSwappedAndWithdrawn = (executor, outputToken, outputAmount) => {
-        if (executor.toLowerCase() === signer.address.toLowerCase()) {
-          // Filter based on signer
-          console.log("SwappedAndWithdrawn event detected for signer!");
-          const formattedAmount = ethers.utils.formatUnits(
-            outputAmount,
-            selectedOutputToken.decimals
-          );
-
-          // Mark transaction as complete and show success
-          setTransactionStatus("completed");
-          toast.success(
-            "Your tokens have been successfully swapped and bridged!",
-            {
-              description: `You have received: ${formattedAmount} ${selectedOutputToken.symbol}`,
-              position: "top-center",
-              duration: 8000,
-            }
-          );
-
-          // Remove the event listener to avoid memory leaks
-          readOnlyContractInstance.off(
-            "SwappedAndWithdrawn",
-            onSwappedAndWithdrawn
-          );
-        }
-      };
-
-      // Attach the event listener for the final completion
-      readOnlyContractInstance.on("SwappedAndWithdrawn", onSwappedAndWithdrawn);
-    } catch (error) {
-      console.error("Swap and bridge failed:", error);
-    }
   };
 
   const autoSelectTokens = () => {
@@ -564,10 +361,12 @@ export default function Component() {
                             aria-expanded={openToken}
                             className="w-full justify-between"
                             disabled={
-                              loading || transactionStatus !== "notStarted"
+                              balancesPending ||
+                              loading ||
+                              transactionStatus !== "notStarted"
                             }
                           >
-                            Select token
+                            {balancesPending ? "Loading..." : "Select token"}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
@@ -662,7 +461,6 @@ export default function Component() {
                   selectedNetwork={selectedNetwork}
                   selectedOutputToken={selectedOutputToken}
                   disabled={loading || transactionStatus !== "notStarted"}
-                  onConfirm={handleSwapConfirm}
                 />
               </div>
             )}
@@ -749,10 +547,16 @@ export default function Component() {
                           disabled={
                             loading ||
                             !selectedNetwork ||
-                            transactionStatus !== "notStarted"
+                            transactionStatus !== "notStarted" ||
+                            balancesPendingDestination
                           }
                         >
-                          {selectedOutputToken?.name || "Select Output Token"}
+                          {selectedOutputToken?.name ||
+                            (!selectedNetwork
+                              ? "Select Network"
+                              : balancesPendingDestination
+                              ? "Loading..."
+                              : "Select Output Token")}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>

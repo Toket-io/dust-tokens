@@ -4,21 +4,15 @@ import { expect } from "chai";
 import { Contract } from "ethers";
 import hre from "hardhat";
 
-import ContractsConfig from "../../ContractsConfig";
 import {
   encodeDestinationPayload,
   encodeZetachainPayload,
+  getUniswapV3EstimatedAmountOut,
   preparePermitData,
   readLocalnetAddresses,
   TokenSwap,
 } from "../../web/src/lib/zetachainUtils";
 import { EvmDustTokens, SimpleSwap, Swap } from "../typechain-types";
-
-const DAI_DECIMALS = 18;
-const USDC_DECIMALS = 6;
-
-// EVM Gateway
-const GATEWAY_ADDRESS: string = readLocalnetAddresses("ethereum", "gatewayEVM");
 
 // Zetachain Contracts
 const ZETA_GATEWAY_ADDRESS: string = readLocalnetAddresses(
@@ -29,36 +23,28 @@ const ZETA_SYSTEM_CONTRACT_ADDRESS: string = readLocalnetAddresses(
   "zetachain",
   "systemContract"
 );
-const ZETA_USDC_ETH_ADDRESS: string = readLocalnetAddresses(
-  "zetachain",
-  "ZRC-20 USDC on 5"
-);
 const ZETA_ETH_ADDRESS: string = readLocalnetAddresses(
   "zetachain",
   "ZRC-20 ETH on 5"
 );
 
-const WETH_ADDRESS: string = ContractsConfig.evm_weth ?? "";
-const DAI_ADDRESS: string = process.env.DAI_ADDRESS ?? "";
-const USDC_ADDRESS: string = process.env.USDC_ADDRESS ?? "";
-const UNI_ADDRESS = process.env.UNI_ADDRESS ?? "";
-const LINK_ADDRESS: string = process.env.LINK_ADDRESS ?? "";
-const WBTC_ADDRESS: string = process.env.WBTC_ADDRESS ?? "";
+// EVM Contracts
+const GATEWAY_ADDRESS: string = readLocalnetAddresses("ethereum", "gatewayEVM");
+const UNISWAP_ROUTER: string = readLocalnetAddresses(
+  "ethereum",
+  "uniswapRouterV3"
+);
+const UNISWAP_QUOTER: string = readLocalnetAddresses(
+  "ethereum",
+  "uniswapQuoterV3"
+);
 
-const UNISWAP_ROUTER: string = ContractsConfig.evm_uniswapRouterV3;
-
-const ercAbi = [
-  // Read-Only Functions
-  "function symbol() view returns (string)",
-  "function name() view returns (string)",
-  "function decimals() view returns (uint8)",
-  "function balanceOf(address owner) view returns (uint256)",
-  // Authenticated Functions
-  "function transfer(address to, uint amount) returns (bool)",
-  "function deposit() public payable",
-  "function approve(address spender, uint256 amount) returns (bool)",
-  "function withdraw(uint256 wad) external",
-];
+const WETH_ADDRESS: string = readLocalnetAddresses("ethereum", "weth");
+const DAI_ADDRESS: string = readLocalnetAddresses("ethereum", "dai");
+const USDC_ADDRESS: string = readLocalnetAddresses("ethereum", "usdc");
+const UNI_ADDRESS = readLocalnetAddresses("ethereum", "uni");
+const LINK_ADDRESS: string = readLocalnetAddresses("ethereum", "link");
+const WBTC_ADDRESS: string = readLocalnetAddresses("ethereum", "wbtc");
 
 describe("EvmDustTokens", function () {
   let signer: SignerWithAddress;
@@ -77,8 +63,6 @@ describe("EvmDustTokens", function () {
 
   // ZetaChain side Contracts
   let universalApp: Swap;
-  let ZETA_USDC_ETH: Contract;
-  let ZETA_ETH: Contract;
 
   // MARK: Helper Functions
   const signPermit = async (swaps: TokenSwap[]) => {
@@ -90,6 +74,38 @@ describe("EvmDustTokens", function () {
     const signature = await signer._signTypedData(domain, types, values);
 
     return { deadline, nonce, signature };
+  };
+
+  const getTokenSwaps = async (
+    tokens: Contract[] = [DAI, LINK, UNI],
+    swapAmount: string = "1",
+    slippageBPS: number = 50
+  ): Promise<TokenSwap[]> => {
+    const swapPromises: Promise<TokenSwap>[] = tokens.map(async (token) => {
+      const amount = hre.ethers.utils.parseUnits(
+        swapAmount,
+        await token.decimals()
+      );
+      const minAmountOut = await getUniswapV3EstimatedAmountOut(
+        hre.ethers.provider,
+        UNISWAP_QUOTER,
+        token.address,
+        WETH.address,
+        amount,
+        slippageBPS
+      );
+
+      return {
+        amount,
+        minAmountOut,
+        token: token.address,
+      };
+    });
+
+    // Await all Promises to resolve
+    const swaps: TokenSwap[] = await Promise.all(swapPromises);
+
+    return swaps;
   };
 
   // MARK: Setup
@@ -145,14 +161,6 @@ describe("EvmDustTokens", function () {
     );
     await universalApp.deployed();
     console.log("Universal App deployed to:", universalApp.address);
-
-    // Connect to ERC20s
-    ZETA_USDC_ETH = new hre.ethers.Contract(
-      ZETA_USDC_ETH_ADDRESS,
-      ercAbi,
-      signer
-    );
-    ZETA_ETH = new hre.ethers.Contract(ZETA_ETH_ADDRESS, ercAbi, signer);
 
     // Approve permit2 contract
     await WETH.approve(PERMIT2_ADDRESS, hre.ethers.constants.MaxUint256);
@@ -212,20 +220,7 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 3: Create input token swaps
-    const swaps: TokenSwap[] = [
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: DAI.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: LINK.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: UNI.address,
-      },
-    ];
+    const swaps: TokenSwap[] = await getTokenSwaps();
 
     // Step 4: Sign permit
     const permit = await signPermit(swaps);
@@ -285,20 +280,7 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 3: Create input token swaps
-    const swaps: TokenSwap[] = [
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: DAI.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: LINK.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: UNI.address,
-      },
-    ];
+    const swaps: TokenSwap[] = await getTokenSwaps();
 
     // Step 4: Sign permit
     const permit = await signPermit(swaps);
@@ -353,20 +335,7 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 3: Create input token swaps
-    const swaps: TokenSwap[] = [
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: DAI.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: LINK.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: UNI.address,
-      },
-    ];
+    const swaps: TokenSwap[] = await getTokenSwaps();
 
     // Step 4: Sign permit
     const permit = await signPermit(swaps);
@@ -421,20 +390,7 @@ describe("EvmDustTokens", function () {
     );
 
     // Step 3: Create input token swaps
-    const swaps: TokenSwap[] = [
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: DAI.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: LINK.address,
-      },
-      {
-        amount: hre.ethers.utils.parseUnits("1", DAI_DECIMALS),
-        token: UNI.address,
-      },
-    ];
+    const swaps: TokenSwap[] = await getTokenSwaps();
 
     // Step 4: Sign permit
     const permit = await signPermit(swaps);
@@ -581,16 +537,7 @@ describe("EvmDustTokens", function () {
   it("Should deposit multiple tokens with Permit2 batch signature transfer", async function () {
     try {
       const tokens = [DAI, UNI];
-      const swaps: TokenSwap[] = [
-        {
-          amount: hre.ethers.utils.parseUnits("100", 18),
-          token: tokens[0].address,
-        },
-        {
-          amount: hre.ethers.utils.parseUnits("200", 18),
-          token: tokens[1].address,
-        },
-      ];
+      const swaps: TokenSwap[] = await getTokenSwaps([DAI, UNI], "100");
 
       const permit = await signPermit(swaps);
 
@@ -625,3 +572,16 @@ describe("EvmDustTokens", function () {
     }
   });
 });
+
+const ercAbi = [
+  // Read-Only Functions
+  "function symbol() view returns (string)",
+  "function name() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function balanceOf(address owner) view returns (uint256)",
+  // Authenticated Functions
+  "function transfer(address to, uint amount) returns (bool)",
+  "function deposit() public payable",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function withdraw(uint256 wad) external",
+];

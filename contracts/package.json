@@ -6,15 +6,11 @@
   "scripts": {
     "lint:fix": "npx eslint . --ext .js,.ts --fix",
     "lint": "npx eslint . --ext .js,.ts",
-    "deploy": "npx hardhat compile --force && npx hardhat deploy --network localhost",
-    "deployDustTokens": "npx hardhat compile --force && npx hardhat deployDustTokens --network localhost",
-    "swap": "npx hardhat swap --network localhost",
-    "balance": "npx hardhat balance --network localhost",
+    "deployUniversalApp": "npx hardhat compile --force && npx hardhat deployUniversalApp --network localhost",
+    "deployEvmContract": "npx hardhat compile --force && npx hardhat deployEvmContract --network localhost",
     "localnet": "npx hardhat localnet --network localhost",
     "localnet:arbitrum": "npx hardhat localnet --anvil '--fork-url=https://arb1.arbitrum.io/rpc --chain-id=31337' --network localhost",
     "test": "npx hardhat test --network localhost",
-    "test:permit2": "npx hardhat test --grep 'should transfer tokens using Permit2 batched transfer'  --network localhost",
-    "test:permit2App": "npx hardhat test --grep 'should work Permit2App'  --network localhost",
     "compile": "npx hardhat compile"
   },
   "keywords": [],
