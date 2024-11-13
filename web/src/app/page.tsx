@@ -15,7 +15,7 @@ const Page = () => {
   return (
     <div className="m-4">
       <div className="flex justify-end gap-2 mb-10">
-        <ConnectBitcoin />
+        {/* <ConnectBitcoin /> */}
         <ConnectButton label="Connect EVM" showBalance={true} />
       </div>
       <div className="p-8 mb-36">

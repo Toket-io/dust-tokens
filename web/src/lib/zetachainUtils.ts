@@ -191,4 +191,5 @@ export {
   encodeZetachainPayload,
   preparePermitData,
   getUniswapV3EstimatedAmountOut,
+  EvmDustTokens,
 };

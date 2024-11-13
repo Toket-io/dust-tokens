@@ -17,7 +17,6 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer";
 import { ArrowDown, Coins } from "lucide-react";
-import { Network, SelectedToken, Token } from "./ArcherDemo";
 import { toast } from "sonner";
 import { ethers } from "ethers";
 import { provider, signer } from "@/app/page";
@@ -25,14 +24,20 @@ import {
   getEvmDustTokensContract,
   getUniswapV3EstimatedAmountOut,
   readLocalnetAddresses,
+  encodeDestinationPayload,
+  encodeZetachainPayload,
+  TokenSwap,
+  EvmDustTokens,
+  preparePermitData,
 } from "@/lib/zetachainUtils";
 import { Badge } from "./ui/badge";
 import { PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
-
+import { Network, SelectedToken, Token } from "@/lib/types";
+import { useAccount, useSendTransaction, useWriteContract } from "wagmi";
 type ProfileFormDrawerProps = {
   selectedTokens: SelectedToken[];
-  selectedNetwork: Network | null;
-  selectedOutputToken: Token | null;
+  selectedNetwork: Network;
+  selectedOutputToken: Token;
   disabled?: boolean;
   onConfirm: (selectedTokens: SelectedToken[]) => void;
 };
@@ -45,12 +50,14 @@ export function SwapPreviewDrawer({
   onConfirm,
 }: ProfileFormDrawerProps) {
   const [open, setOpen] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
   const [amountOut, setAmountOut] = React.useState<string | null>(null);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const [permit2Status, setPermit2Status] = useState<{
     [key: string]: boolean;
   }>({});
+
+  const { address } = useAccount();
+  const { data: hash, isPending, writeContract } = useWriteContract();
 
   useEffect(() => {
     const initializeProvider = async () => {
@@ -191,17 +198,67 @@ export function SwapPreviewDrawer({
     }
   };
 
+  const signPermit = async (swaps: TokenSwap[]) => {
+    const { domain, types, values, deadline, nonce } = await preparePermitData(
+      provider,
+      swaps,
+      readLocalnetAddresses("ethereum", "EvmDustTokens")
+    );
+    const signature = await signer._signTypedData(domain, types, values);
+
+    return { deadline, nonce, signature };
+  };
+
   const handleConfirm = async () => {
-    setSaving(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const recipient = address as string;
+
+      // Step 1: Prepare payloads
+      const outputToken = selectedOutputToken.address;
+      const destinationPayload = encodeDestinationPayload(
+        recipient,
+        outputToken
+      );
+      const encodedParameters = encodeZetachainPayload(
+        selectedNetwork.zrc20Address,
+        selectedNetwork.contractAddress,
+        recipient,
+        destinationPayload
+      );
+      const tokenSwaps: TokenSwap[] = selectedTokens.map(
+        ({ amount, decimals, address }) => ({
+          amount: ethers.utils.parseUnits(amount, decimals),
+          token: address,
+          minAmountOut: ethers.constants.Zero, // TODO: Set a minimum amount out
+        })
+      );
+
+      const permit = await signPermit(tokenSwaps);
+
+      // Step 2: Perform swap and bridge transaction
+      writeContract({
+        address: readLocalnetAddresses(
+          "ethereum",
+          "EvmDustTokens"
+        ) as `0x${string}`,
+        abi: EvmDustTokens.abi,
+        functionName: "SwapAndBridgeTokens",
+        args: [
+          tokenSwaps,
+          readLocalnetAddresses("zetachain", "Swap"),
+          encodedParameters,
+          permit.nonce,
+          permit.deadline,
+          permit.signature,
+        ],
+      });
 
       setOpen(false);
-      onConfirm(selectedTokens);
+      // onConfirm(selectedTokens);
     } catch (error) {
-      toast.error("Something went wrong. Please try again later.");
-    } finally {
-      setSaving(false);
+      toast.error("Something went wrong. Please try again later.", {
+        position: "top-center",
+      });
     }
   };
 
@@ -268,7 +325,7 @@ export function SwapPreviewDrawer({
                 !amountOut ||
                 Object.values(permit2Status).some((status) => status === false)
               }
-              loading={saving}
+              loading={isPending}
               size="full"
               onClick={handleConfirm}
             >
@@ -276,7 +333,7 @@ export function SwapPreviewDrawer({
             </Button>
             <Button
               variant="outline"
-              disabled={disabled || !amountOut || saving}
+              disabled={disabled || !amountOut || isPending}
               size="full"
               onClick={() => setOpen(false)}
             >
