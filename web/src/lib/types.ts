@@ -1,3 +1,5 @@
+import { ethers } from "ethers";
+
 export interface Token {
   name: string;
   symbol: string;
@@ -29,3 +31,9 @@ export type TransactionState =
   | "zetaPending"
   | "destinationPending"
   | "completed";
+
+export type TokenSwap = {
+  amount: ethers.BigNumber;
+  token: string;
+  minAmountOut: ethers.BigNumber;
+};

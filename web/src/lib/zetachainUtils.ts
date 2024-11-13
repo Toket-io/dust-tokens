@@ -1,14 +1,6 @@
-import { ethers } from "ethers";
 import { SignatureTransfer, PERMIT2_ADDRESS } from "@uniswap/Permit2-sdk";
 import EvmDustTokens from "../../../contracts/artifacts/contracts/EvmDustTokens.sol/EvmDustTokens.json";
-
 import LocalnetAddresses from "../../../contracts/localnet.json";
-
-export type TokenSwap = {
-  amount: ethers.BigNumber;
-  token: string;
-  minAmountOut: ethers.BigNumber;
-};
 
 type AddressData = {
   chain: string;
@@ -18,19 +10,6 @@ type AddressData = {
 type LocalnetData = {
   pid: number;
   addresses: AddressData[];
-};
-
-const getEvmDustTokensContract = (address: string, signer: ethers.Signer) => {
-  const contract = new ethers.Contract(address, EvmDustTokens.abi, signer);
-  return contract;
-};
-
-const getReadOnlyEvmDustTokensContract = (
-  address: string,
-  provider: ethers.providers.BaseProvider
-) => {
-  const contract = new ethers.Contract(address, EvmDustTokens.abi, provider);
-  return contract;
 };
 
 const readLocalnetAddresses = (chain: string, type: string) => {
@@ -184,8 +163,6 @@ async function getUniswapV3EstimatedAmountOut(
 }
 
 export {
-  getEvmDustTokensContract,
-  getReadOnlyEvmDustTokensContract,
   readLocalnetAddresses,
   encodeDestinationPayload,
   encodeZetachainPayload,

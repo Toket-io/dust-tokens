@@ -24,11 +24,7 @@ import { SwapPreviewDrawer } from "./SwapPreviewDrawer";
 import { ethers } from "ethers";
 import { toast } from "sonner";
 import TransactionStatus from "./TransactionStatus";
-import {
-  getReadOnlyEvmDustTokensContract,
-  readLocalnetAddresses,
-  EvmDustTokens,
-} from "@/lib/zetachainUtils";
+import { readLocalnetAddresses, EvmDustTokens } from "@/lib/zetachainUtils";
 import { Network, SelectedToken, Token, TransactionState } from "@/lib/types";
 import { useAccount, useReadContract, useWatchContractEvent } from "wagmi";
 

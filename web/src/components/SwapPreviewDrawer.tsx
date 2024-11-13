@@ -18,12 +18,11 @@ import {
   readLocalnetAddresses,
   encodeDestinationPayload,
   encodeZetachainPayload,
-  TokenSwap,
   EvmDustTokens,
   preparePermitData,
 } from "@/lib/zetachainUtils";
-import { Network, SelectedToken, Token } from "@/lib/types";
 import { useAccount, useWriteContract } from "wagmi";
+import { Network, SelectedToken, Token, TokenSwap } from "@/lib/types";
 import SwapTokenLine from "./SwapTokenLine";
 type ProfileFormDrawerProps = {
   selectedTokens: SelectedToken[];
