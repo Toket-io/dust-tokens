@@ -9,19 +9,11 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerFooter,
-  DrawerTrigger,
-  DrawerClose,
-} from "@/components/ui/drawer";
 import { ArrowDown, Coins } from "lucide-react";
 import { toast } from "sonner";
 import { ethers } from "ethers";
 import { provider, signer } from "@/app/page";
 import {
-  getEvmDustTokensContract,
   getUniswapV3EstimatedAmountOut,
   readLocalnetAddresses,
   encodeDestinationPayload,
@@ -172,9 +164,10 @@ export function SwapPreviewDrawer({
         })
       );
 
+      // Step 2: Create Permit2 Batch transfer signature
       const permit = await signPermit(tokenSwaps);
 
-      // Step 2: Perform swap and bridge transaction
+      // Step 3: Perform swap and bridge transaction
       writeContract({
         address: readLocalnetAddresses(
           "ethereum",
